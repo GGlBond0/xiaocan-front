@@ -239,6 +239,9 @@ onMounted(() => {
       <router-link to="/grab-history" class="nav-link" :class="{ active: currentPage === 'grab-history' }">
         抢单记录
       </router-link>
+      <router-link to="/grab-card" class="nav-link" :class="{ active: currentPage === 'grab-card' }">
+        卡券查询
+      </router-link>
       <router-link to="/notify-history" class="nav-link" :class="{ active: currentPage === 'notify-history' }">
         通知记录
       </router-link>

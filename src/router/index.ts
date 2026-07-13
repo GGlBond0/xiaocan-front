@@ -38,6 +38,11 @@ const router = createRouter({
       name: 'grab-history',
       component: () => import('../views/GrabHistoryView.vue'),
     },
+    {
+      path: '/grab-card',
+      name: 'grab-card',
+      component: () => import('../views/GrabCardView.vue'),
+    },
   ],
 })
 
