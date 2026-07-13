@@ -242,11 +242,32 @@ async function loadStores() {
   }
 }
 
-function pickStore(row: any) {
+function pickStore(row: any, setScheduled: boolean = false) {
   form.promotionId = row.promotionId
   // silk_id 通常与用户相关，抓包录入的登录态对应；这里不自动填，保留用户手填或 0
+  let tip = `已选活动 ${row.promotionId}（${row.name}）`
+  if (setScheduled && row.startTime) {
+    // 把开抢时间配上当天日期，填入一次性执行时间（命中后自动停用）
+    const today = new Date()
+    const [hh, mm] = row.startTime.split(':')
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate(),
+      Number(hh) || 0, Number(mm) || 0, 0)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    form.executeAt = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`
+    form.cron = ''
+    tip += `，并设为 ${row.startTime} 一次性开抢`
+  }
   storeDialogVisible.value = false
-  ElMessage.success(`已选活动 ${row.promotionId}（${row.name}）`)
+  ElMessage.success(tip)
+}
+
+function timeRange(row: any): string {
+  if (!row.startTime && !row.endTime) return ''
+  return `${row.startTime || ''}-${row.endTime || ''}`
+}
+
+function isAllDay(row: any): boolean {
+  return !row.startTime || !row.endTime
 }
 
 function platformName(type: number) {
@@ -380,13 +401,20 @@ onMounted(async () => {
         <el-table-column label="满/返" width="120">
           <template #default="{ row }">{{ row.price }} / {{ row.rebatePrice }}</template>
         </el-table-column>
+        <el-table-column label="可抢时段" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="isAllDay(row)" type="info" size="small">全天</el-tag>
+            <el-tag v-else type="warning" size="small">{{ timeRange(row) }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="leftNumber" label="库存" width="70" />
         <el-table-column prop="distance" label="距离" width="80">
           <template #default="{ row }">{{ row.distance }}m</template>
         </el-table-column>
-        <el-table-column label="操作" width="80" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" @click="pickStore(row)">选择</el-button>
+            <el-button v-if="!isAllDay(row)" size="small" @click="pickStore(row, true)">设为定时</el-button>
           </template>
         </el-table-column>
       </el-table>
