@@ -59,6 +59,11 @@ const storeQuery = reactive({
   pageNum: 1,
   pageSize: 20,
 })
+// 平台筛选：1美团 2饿了么 3京东，默认全显示
+const platformFilter = reactive<Record<number, boolean>>({ 1: true, 2: true, 3: true })
+const filteredStoreList = computed(() =>
+  storeList.value.filter((s: any) => platformFilter[s.type] !== false),
+)
 
 function resetForm() {
   Object.assign(form, {
@@ -407,28 +412,37 @@ onMounted(async () => {
     </el-dialog>
 
     <!-- 活动选择对话框 -->
-    <el-dialog v-model="storeDialogVisible" title="选择要抢的活动" width="780px" align-center>
+    <el-dialog v-model="storeDialogVisible" title="选择要抢的活动" width="1080px" align-center>
       <div class="store-toolbar">
         <el-checkbox v-model="storeQuery.onlyAvailable" @change="loadStores">仅看可抢</el-checkbox>
+        <span class="plat-filter-label">平台：</span>
+        <el-checkbox v-model="platformFilter[1]">美团</el-checkbox>
+        <el-checkbox v-model="platformFilter[2]">饿了么</el-checkbox>
+        <el-checkbox v-model="platformFilter[3]">京东</el-checkbox>
         <el-button size="small" @click="loadStores">刷新</el-button>
       </div>
-      <el-table :data="storeList" v-loading="storeLoading" max-height="420" size="small">
-        <el-table-column prop="name" label="店铺" min-width="160" show-overflow-tooltip />
-        <el-table-column label="平台" width="80">
+      <el-table :data="filteredStoreList" v-loading="storeLoading" max-height="440" size="small">
+        <el-table-column prop="name" label="店铺" min-width="150" show-overflow-tooltip />
+        <el-table-column label="平台" width="70">
           <template #default="{ row }">{{ platformName(row.type) }}</template>
         </el-table-column>
-        <el-table-column prop="promotionId" label="活动ID" width="110" />
-        <el-table-column label="满/返" width="120">
+        <el-table-column prop="promotionId" label="活动ID" width="95" />
+        <el-table-column label="满/返" width="105">
           <template #default="{ row }">{{ row.price }} / {{ row.rebatePrice }}</template>
         </el-table-column>
-        <el-table-column label="可抢时段" width="120">
+        <el-table-column label="实付" width="75">
+          <template #default="{ row }">
+            {{ (row.price != null && row.rebatePrice != null) ? (row.price - row.rebatePrice) : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="可抢时段" width="110">
           <template #default="{ row }">
             <el-tag v-if="isAllDay(row)" type="info" size="small">全天</el-tag>
             <el-tag v-else type="warning" size="small">{{ timeRange(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="leftNumber" label="库存" width="70" />
-        <el-table-column prop="distance" label="距离" width="80">
+        <el-table-column prop="leftNumber" label="库存" width="60" />
+        <el-table-column prop="distance" label="距离" width="70">
           <template #default="{ row }">{{ row.distance }}m</template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
@@ -476,5 +490,11 @@ onMounted(async () => {
   gap: 16px;
   align-items: center;
   margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.plat-filter-label {
+  color: #606266;
+  font-size: 13px;
+  margin-left: 4px;
 }
 </style>
