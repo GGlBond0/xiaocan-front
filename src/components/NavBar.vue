@@ -230,6 +230,15 @@ onMounted(() => {
       <router-link to="/monitor" class="nav-link" :class="{ active: currentPage === 'monitor' }">
         监控管理
       </router-link>
+      <router-link to="/grab" class="nav-link" :class="{ active: currentPage === 'grab' }">
+        抢单
+      </router-link>
+      <router-link to="/grab-login" class="nav-link" :class="{ active: currentPage === 'grab-login' }">
+        抢单登录态
+      </router-link>
+      <router-link to="/grab-history" class="nav-link" :class="{ active: currentPage === 'grab-history' }">
+        抢单记录
+      </router-link>
       <router-link to="/notify-history" class="nav-link" :class="{ active: currentPage === 'notify-history' }">
         通知记录
       </router-link>
