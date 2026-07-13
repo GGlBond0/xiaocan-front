@@ -268,10 +268,12 @@ function timeRange(row: any): string {
 
 function isAllDay(row: any): boolean {
   if (!row.startTime || !row.endTime) return true
-  // 00:00-23:59 / 00:00-24:00 等近似全天的时段也视为全天
-  const s = String(row.startTime).slice(0, 5)
-  const e = String(row.endTime).slice(0, 5)
-  return s === '00:00' && (e === '23:59' || e === '24:00')
+  // 起始 ≤ 00:00 且结束 ≥ 23:59（含 00:00-23:59 / 00:00-24:00 / 带秒精度等）视为全天
+  const toMin = (t: string): number => {
+    const p = String(t).split(':')
+    return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0)
+  }
+  return toMin(row.startTime) <= 0 && toMin(row.endTime) >= 23 * 60 + 59
 }
 
 function platformName(type: number) {
