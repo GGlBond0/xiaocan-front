@@ -23,6 +23,21 @@ const router = createRouter({
       name: 'notify-history',
       component: () => import('../views/NotifyHistoryView.vue'),
     },
+    {
+      path: '/grab-login',
+      name: 'grab-login',
+      component: () => import('../views/GrabLoginView.vue'),
+    },
+    {
+      path: '/grab',
+      name: 'grab',
+      component: () => import('../views/GrabConfigView.vue'),
+    },
+    {
+      path: '/grab-history',
+      name: 'grab-history',
+      component: () => import('../views/GrabHistoryView.vue'),
+    },
   ],
 })
 
