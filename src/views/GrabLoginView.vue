@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, inject } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 
 const authState = inject<{
@@ -9,129 +9,154 @@ const authState = inject<{
   waitForAuth: () => Promise<void>
 }>('authState')!
 
-const rawHeaders = ref('')
+const stateList = ref<any[]>([])
+const loading = ref(false)
 const saving = ref(false)
-const loginState = ref<any>(null)
-const loadingState = ref(false)
 
-async function loadLoginState() {
-  loadingState.value = true
+const dialogVisible = ref(false)
+const editingId = ref<number | null>(null)
+const form = ref({ name: '', rawHeaders: '' })
+
+async function loadList() {
+  loading.value = true
   try {
-    const res = await api.get('/api/grab/login-state')
-    loginState.value = res.data.data
-  } catch {
-    /* interceptor handles */
+    const res = await api.get('/api/grab/login-state/list')
+    stateList.value = res.data.data || []
   } finally {
-    loadingState.value = false
+    loading.value = false
   }
 }
 
+function openAdd() {
+  editingId.value = null
+  form.value = { name: '', rawHeaders: '' }
+  dialogVisible.value = true
+}
+
+function openEdit(row: any) {
+  editingId.value = row.id
+  form.value = { name: row.name, rawHeaders: '' }
+  dialogVisible.value = true
+}
+
 async function handleSave() {
-  const text = rawHeaders.value.trim()
-  if (!text) {
-    ElMessage.warning('请粘贴抓包 header（含 X-Sivir / X-Session-Id 等）')
+  if (!form.value.rawHeaders.trim()) {
+    ElMessage.warning('请粘贴抓包 header')
     return
   }
   saving.value = true
   try {
-    const res = await api.post('/api/grab/login-state', { rawHeaders: text })
-    ElMessage.success(res.data.data?.msg || '登录态已保存')
-    rawHeaders.value = ''
-    await loadLoginState()
-  } catch {
-    /* interceptor handles */
+    const config = editingId.value != null ? { params: { id: editingId.value } } : undefined
+    const res = await api.post('/api/grab/login-state', form.value, config)
+    ElMessage.success(res.data.data?.msg || '已保存')
+    dialogVisible.value = false
+    await loadList()
   } finally {
     saving.value = false
   }
 }
 
+async function handleDelete(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除登录态「${row.name}」？关联的抢单配置将失效。`, '提示', { type: 'warning' })
+  } catch {
+    return
+  }
+  await api.delete(`/api/grab/login-state/${row.id}`)
+  ElMessage.success('已删除')
+  await loadList()
+}
+
+function statusType(s: string) {
+  return { '有效': 'success', '即将过期': 'warning', '已过期': 'danger', '未知': 'info' }[s] || 'info'
+}
+
 onMounted(async () => {
   await authState?.waitForAuth?.()
-  await loadLoginState()
+  await loadList()
 })
 </script>
 
 <template>
   <div class="grab-login-view">
     <div class="page-card">
-      <h2 class="page-title">抢单登录态绑定</h2>
+      <div class="header-row">
+        <h2 class="page-title">抢单登录态</h2>
+        <el-button type="primary" @click="openAdd">新增登录态</el-button>
+      </div>
       <p class="page-desc">
-        抢单需登录态。在小蚕 App 抓包一次抢单请求，把请求头（含 X-Sivir / X-Session-Id / X-Teemo /
-        X-Vayne / X-Nami）整段粘贴到下方，系统会自动解析保存。JWT 过期后需重新录入。
+        可保存多组小蚕登录态（如主账号/小号）。在小蚕 App 抓包一次抢单请求，把请求头整段粘贴录入。
+        抢单配置可绑定其中一组。JWT 过期后需重新录入。
       </p>
 
-      <div class="state-box" v-loading="loadingState">
-        <template v-if="loginState">
-          <el-tag :type="loginState.success ? 'success' : 'info'">
-            {{ loginState.success ? '已绑定' : '未绑定' }}
-          </el-tag>
-          <span class="state-msg">{{ loginState.msg }}</span>
-        </template>
-        <el-button size="small" @click="loadLoginState">刷新</el-button>
-      </div>
-
-      <el-input
-        v-model="rawHeaders"
-        type="textarea"
-        :rows="12"
-        placeholder="在此粘贴抓包 header，例如：&#10;X-Sivir: eyJ...&#10;X-Session-Id: 925d8dc4-...&#10;X-Teemo: 222559356&#10;X-Vayne: 5263106&#10;X-Nami: 6762225593567970&#10;&#10;或直接粘贴抓包导出的整段 JSON（含 headers 节点）"
-        class="header-input"
-      />
-      <el-button type="primary" :loading="saving" @click="handleSave" class="save-btn">
-        解析并保存
-      </el-button>
+      <el-table :data="stateList" v-loading="loading" style="width: 100%" stripe>
+        <el-table-column prop="id" label="ID" width="60" />
+        <el-table-column prop="name" label="别名" width="140" />
+        <el-table-column prop="xcUserId" label="小蚕用户ID" width="110" />
+        <el-table-column prop="silkId" label="silk_id" width="110" />
+        <el-table-column prop="expireAt" label="过期时间" width="180" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="statusType(row.expireStatus)">{{ row.expireStatus }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEdit(row)">更新</el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
+
+    <el-dialog v-model="dialogVisible" :title="editingId != null ? '更新登录态' : '新增登录态'" width="560px" align-center>
+      <el-form label-width="90px">
+        <el-form-item label="别名">
+          <el-input v-model="form.name" placeholder="如 主账号/小号" />
+        </el-form-item>
+        <el-form-item label="抓包header">
+          <el-input v-model="form.rawHeaders" type="textarea" :rows="10"
+            placeholder="粘贴抓包 header（含 X-Sivir/X-Session-Id/X-Vayne/X-Teemo/X-Nami）或抓包 JSON" />
+        </el-form-item>
+        <div v-if="editingId != null" class="hint">留空则保留原登录态，填写则覆盖（重新抓包后粘贴新值）。</div>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
 .grab-login-view {
-  max-width: 760px;
+  max-width: 1000px;
   margin: 0 auto;
 }
 .page-card {
   background: rgba(255, 255, 255, 0.95);
   border-radius: 16px;
-  padding: 28px;
+  padding: 24px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
 }
 .page-title {
-  margin: 0 0 8px;
+  margin: 0;
   color: #2c3e50;
 }
 .page-desc {
   color: #909399;
-  font-size: 14px;
-  line-height: 1.6;
-  margin: 0 0 20px;
-}
-.state-box {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.state-msg {
-  color: #606266;
-  font-size: 14px;
-}
-.header-input :deep(.el-textarea__inner) {
-  font-family: 'Courier New', monospace;
   font-size: 13px;
-  border-radius: 10px;
+  line-height: 1.6;
+  margin: 0 0 16px;
 }
-.save-btn {
-  margin-top: 16px;
-  height: 44px;
-  border-radius: 12px;
-  font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-}
-.save-btn:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+.hint {
+  color: #e6a23c;
+  font-size: 12px;
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, inject } from 'vue'
+import { ref, reactive, computed, onMounted, inject } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import api from '../api'
@@ -12,7 +12,14 @@ const authState = inject<{
 
 const configList = ref<any[]>([])
 const locationList = ref<any[]>([])
+const loginStateList = ref<any[]>([])
 const loading = ref(false)
+
+const loginStateMap = computed(() => {
+  const m: Record<number, string> = {}
+  for (const s of loginStateList.value) m[s.id] = s.name
+  return m
+})
 
 // 对话框
 const dialogVisible = ref(false)
@@ -22,6 +29,7 @@ const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
 const form = reactive({
+  loginStateId: null as number | null,
   locationId: null as number | null,
   promotionId: null as number | null,
   silkId: 0 as number | null,
@@ -34,6 +42,7 @@ const form = reactive({
 })
 
 const formRules = {
+  loginStateId: [{ required: true, message: '请选择登录态', trigger: 'change' }],
   locationId: [{ required: true, message: '请选择位置', trigger: 'change' }],
   promotionId: [{ required: true, message: '请填写活动 promotion_id', trigger: 'blur' }],
 }
@@ -53,6 +62,7 @@ const storeQuery = reactive({
 
 function resetForm() {
   Object.assign(form, {
+    loginStateId: null,
     locationId: null,
     promotionId: null,
     silkId: 0,
@@ -84,11 +94,22 @@ async function loadLocations() {
   }
 }
 
+async function loadLoginStates() {
+  try {
+    const res = await api.get('/api/grab/login-state/list')
+    loginStateList.value = res.data.data || []
+  } catch {
+    /* ignore */
+  }
+}
+
 function openAdd() {
   isEdit.value = false
   editingId.value = null
   resetForm()
-  // 默认选第一个位置
+  if (loginStateList.value.length > 0) {
+    form.loginStateId = loginStateList.value[0].id
+  }
   if (locationList.value.length > 0) {
     form.locationId = locationList.value[0].id
   }
@@ -99,6 +120,7 @@ function openEdit(row: any) {
   isEdit.value = true
   editingId.value = row.id
   Object.assign(form, {
+    loginStateId: row.loginStateId,
     locationId: row.locationId,
     promotionId: row.promotionId,
     silkId: row.silkId ?? 0,
@@ -120,6 +142,7 @@ async function handleSubmit() {
   }
   submitLoading.value = true
   const payload: any = {
+    loginStateId: form.loginStateId,
     locationId: form.locationId,
     promotionId: form.promotionId,
     silkId: form.silkId,
@@ -232,7 +255,7 @@ function platformName(type: number) {
 
 onMounted(async () => {
   await authState?.waitForAuth?.()
-  await Promise.all([loadConfigs(), loadLocations()])
+  await Promise.all([loadConfigs(), loadLocations(), loadLoginStates()])
 })
 </script>
 
@@ -246,6 +269,11 @@ onMounted(async () => {
 
       <el-table :data="configList" v-loading="loading" style="width: 100%" stripe>
         <el-table-column prop="id" label="ID" width="60" />
+        <el-table-column label="登录态" width="120">
+          <template #default="{ row }">
+            {{ loginStateMap[row.loginStateId] || `#${row.loginStateId}` || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="promotionId" label="活动ID" width="110" />
         <el-table-column prop="silkId" label="silk_id" width="110" />
         <el-table-column label="定时" width="180">
@@ -286,6 +314,13 @@ onMounted(async () => {
     <!-- 配置对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑抢单' : '新建抢单'" width="560px" align-center>
       <el-form :model="form" :rules="formRules" ref="formRef" label-width="110px">
+        <el-form-item label="登录态" prop="loginStateId">
+          <el-select v-model="form.loginStateId" placeholder="选择抢单账号" style="width: 100%">
+            <el-option v-for="s in loginStateList" :key="s.id"
+              :label="`${s.name}（用户${s.xcUserId}${s.expireStatus === '已过期' ? '/已过期' : ''}）`" :value="s.id" />
+          </el-select>
+          <div class="hint" v-if="loginStateList.length === 0">未录入登录态，请先到「抢单登录态」页面新增</div>
+        </el-form-item>
         <el-form-item label="位置" prop="locationId">
           <el-select v-model="form.locationId" placeholder="选择位置" style="width: 100%">
             <el-option v-for="l in locationList" :key="l.id" :label="`${l.name}(${l.address})`" :value="l.id" />
@@ -299,6 +334,7 @@ onMounted(async () => {
         </el-form-item>
         <el-form-item label="silk_id">
           <el-input-number v-model="form.silkId" :min="0" :controls="false" style="width: 100%" />
+          <div class="hint">抢单实际使用登录态的 silk_id，此字段保留兼容可留 0</div>
         </el-form-item>
         <el-form-item label="cron 表达式">
           <el-input v-model="form.cron" placeholder="6位含秒，如 0 0 10 * * ?；留空则不用定时" />
