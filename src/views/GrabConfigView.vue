@@ -228,15 +228,29 @@ async function loadStores() {
   }
   storeLoading.value = true
   try {
+    // 固定 orderType=2 触发后端全量扫描(默认排序只取上游第一页，会漏掉
+    // 排在后面的非全天活动)。传 onlyAvailable=false 拿全量，前端自行按
+    // 库存过滤——这样未到点但有库存的非全天活动也能看到，便于提前设定时。
     const res = await api.post('/api/xiaochan/query', {
       cityCode: storeQuery.cityCode,
       latitude: storeQuery.latitude,
       longitude: storeQuery.longitude,
-      onlyAvailable: storeQuery.onlyAvailable,
-      pageNum: storeQuery.pageNum,
+      onlyAvailable: false,
+      orderType: 2,
+      pageNum: 1,
       pageSize: storeQuery.pageSize,
     })
-    storeList.value = res.data.data || []
+    let list = res.data.data || []
+    if (storeQuery.onlyAvailable) {
+      list = list.filter((s: any) => s.leftNumber != null && s.leftNumber > 0)
+    }
+    // 按实付金额(price)升序，无 price 排末尾
+    list = [...list].sort((a: any, b: any) => {
+      const pa = a.price == null ? Infinity : a.price
+      const pb = b.price == null ? Infinity : b.price
+      return pa - pb
+    })
+    storeList.value = list
   } finally {
     storeLoading.value = false
   }
