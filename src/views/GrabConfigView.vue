@@ -244,12 +244,12 @@ async function loadStores() {
     if (storeQuery.onlyAvailable) {
       list = list.filter((s: any) => s.leftNumber != null && s.leftNumber > 0)
     }
-    // 按实付金额(price)升序，无 price 排末尾
-    list = [...list].sort((a: any, b: any) => {
-      const pa = a.price == null ? Infinity : a.price
-      const pb = b.price == null ? Infinity : b.price
-      return pa - pb
-    })
+    // 按「实付」(满-返差值)升序，差额越小越靠前；缺字段的排末尾
+    const realPay = (s: any): number => {
+      if (s.price == null || s.rebatePrice == null) return Infinity
+      return s.price - s.rebatePrice
+    }
+    list = [...list].sort((a: any, b: any) => realPay(a) - realPay(b))
     storeList.value = list
   } finally {
     storeLoading.value = false
