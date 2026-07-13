@@ -47,6 +47,8 @@ onMounted(async () => {
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="grabConfigId" label="配置ID" width="80" />
         <el-table-column prop="promotionId" label="活动ID" width="110" />
+        <el-table-column prop="storeName" label="商家" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="promoDetail" label="优惠明细" width="110" />
         <el-table-column prop="startTime" label="时间" width="180" />
         <el-table-column label="触发" width="80">
           <template #default="{ row }">{{ triggerType(row.triggerType) }}</template>
