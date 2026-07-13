@@ -60,9 +60,16 @@ const storeQuery = reactive({
   pageSize: 20,
 })
 // 平台筛选：1美团 2饿了么 3京东，默认全显示
-const platformFilter = reactive<Record<number, boolean>>({ 1: true, 2: true, 3: true })
+const showMeituan = ref(true)
+const showEleme = ref(true)
+const showJd = ref(true)
 const filteredStoreList = computed(() =>
-  storeList.value.filter((s: any) => platformFilter[s.type] !== false),
+  storeList.value.filter((s: any) => {
+    if (s.type === 1) return showMeituan.value
+    if (s.type === 2) return showEleme.value
+    if (s.type === 3) return showJd.value
+    return true
+  }),
 )
 
 function resetForm() {
@@ -416,9 +423,9 @@ onMounted(async () => {
       <div class="store-toolbar">
         <el-checkbox v-model="storeQuery.onlyAvailable" @change="loadStores">仅看可抢</el-checkbox>
         <span class="plat-filter-label">平台：</span>
-        <el-checkbox v-model="platformFilter[1]">美团</el-checkbox>
-        <el-checkbox v-model="platformFilter[2]">饿了么</el-checkbox>
-        <el-checkbox v-model="platformFilter[3]">京东</el-checkbox>
+        <el-checkbox v-model="showMeituan">美团</el-checkbox>
+        <el-checkbox v-model="showEleme">饿了么</el-checkbox>
+        <el-checkbox v-model="showJd">京东</el-checkbox>
         <el-button size="small" @click="loadStores">刷新</el-button>
       </div>
       <el-table :data="filteredStoreList" v-loading="storeLoading" max-height="440" size="small">
