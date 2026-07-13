@@ -13,7 +13,9 @@ const loginStateList = ref<any[]>([])
 const selectedLoginStateId = ref<number | null>(null)
 const cardList = ref<any[]>([])
 const loading = ref(false)
-const query = ref({ number: 15, offset: 0, status: 0 })
+const pageSize = 15
+const page = ref(1)
+const hasMore = ref(false)
 
 async function loadLoginStates() {
   try {
@@ -35,14 +37,33 @@ async function loadCards() {
   try {
     const res = await api.get('/api/grab/card/list', {
       loginStateId: selectedLoginStateId.value,
-      number: query.value.number,
-      offset: query.value.offset,
-      status: query.value.status,
+      number: pageSize,
+      offset: (page.value - 1) * pageSize,
+      status: 0,
     })
     cardList.value = res.data.data || []
+    // 返回满页则可能有下一页
+    hasMore.value = cardList.value.length === pageSize
   } finally {
     loading.value = false
   }
+}
+
+function prevPage() {
+  if (page.value > 1) {
+    page.value--
+    loadCards()
+  }
+}
+function nextPage() {
+  if (hasMore.value) {
+    page.value++
+    loadCards()
+  }
+}
+function onLoginStateChange() {
+  page.value = 1
+  loadCards()
 }
 
 function cardTypeLabel(t: number) {
@@ -66,13 +87,14 @@ onMounted(async () => {
         <h2 class="page-title">卡券查询</h2>
         <div class="toolbar">
           <el-select v-model="selectedLoginStateId" placeholder="选择登录态" style="width: 200px"
-            @change="loadCards">
+            @change="onLoginStateChange">
             <el-option v-for="s in loginStateList" :key="s.id"
               :label="`${s.name}（用户${s.xcUserId}）`" :value="s.id" />
           </el-select>
-          <el-input-number v-model="query.number" :min="1" :max="50" size="small" />
-          <el-input-number v-model="query.offset" :min="0" :step="query.number" size="small" />
-          <el-button size="small" @click="loadCards" :loading="loading">查询</el-button>
+          <el-button size="small" @click="loadCards" :loading="loading">刷新</el-button>
+          <el-button size="small" @click="prevPage" :disabled="page <= 1">上一页</el-button>
+          <span class="page-info">第 {{ page }} 页</span>
+          <el-button size="small" @click="nextPage" :disabled="!hasMore">下一页</el-button>
         </div>
       </div>
 
@@ -113,6 +135,7 @@ onMounted(async () => {
 }
 .page-title { margin: 0; color: #2c3e50; }
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.page-info { color: #606266; font-size: 13px; }
 .empty { text-align: center; color: #c0c4cc; padding: 40px 0; }
 .card-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
