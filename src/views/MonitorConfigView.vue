@@ -42,6 +42,7 @@ const editingId = ref<number | null>(null)
 const currentEditConfig = ref<any>(null)
 const submitLoading = ref(false)
 const locationList = ref<any[]>([])
+const loginStateList = ref<any[]>([])
 const formRef = ref<FormInstance>()
 
 const weekOptions = [
@@ -69,6 +70,8 @@ const form = reactive({
     limitDistance: true,
     within3km: false,
   },
+  autoGrab: false,
+  grabLoginStateId: null as number | null,
 })
 
 const cronCollapseActive = ref<string[]>([])
@@ -149,6 +152,18 @@ const formRules = {
         }
       },
       trigger: 'blur',
+    },
+  ],
+  grabLoginStateId: [
+    {
+      validator: (_rule: any, value: number | null, callback: any) => {
+        if (form.autoGrab && (value === null || value === undefined)) {
+          callback(new Error('开启自动抢单时必须选择抢单账号'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change',
     },
   ],
 }
@@ -254,6 +269,23 @@ async function loadLocations() {
   }
 }
 
+async function loadLoginStates() {
+  try {
+    const response = await api.get('/api/login-state/list')
+    if (response.data.success) {
+      loginStateList.value = response.data.data || []
+    }
+  } catch {
+    // 静默失败，自动抢单账号下拉可能为空
+  }
+}
+
+function getLoginStateName(id: number | null) {
+  if (id == null) return ''
+  const s = loginStateList.value.find((l: any) => l.id === id)
+  return s ? s.name : '未知账号'
+}
+
 function resetForm() {
   formRef.value?.resetFields()
   form.locationId = null
@@ -263,6 +295,8 @@ function resetForm() {
   form.cron = ''
   form.minimumPayExtNotifyConfig = { minimumPay: 1, within3km: false }
   form.storeKeywordExtNotifyConfig = { keyword: '', limitDistance: true, within3km: false }
+  form.autoGrab = false
+  form.grabLoginStateId = null
   cronCollapseActive.value = []
   configType.value = 'MINIMUM_PAY'
   isEdit.value = false
@@ -296,6 +330,8 @@ function showEditDialog(config: any) {
     form.storeKeywordExtNotifyConfig.limitDistance = config.storeKeywordExtNotifyConfig.limitDistance !== false
     form.storeKeywordExtNotifyConfig.within3km = config.storeKeywordExtNotifyConfig.within3km === true
   }
+  form.autoGrab = config.autoGrab === true
+  form.grabLoginStateId = config.grabLoginStateId ?? null
   dialogVisible.value = true
 }
 
@@ -311,6 +347,8 @@ function submitForm() {
           startHour: trimmedCron ? (form.startHour ?? null) : form.startHour,
           endHour: trimmedCron ? (form.endHour ?? null) : form.endHour,
           weeks: trimmedCron ? (form.weeks.length > 0 ? form.weeks.join(',') : null) : form.weeks.join(','),
+          autoGrab: form.autoGrab === true,
+          grabLoginStateId: form.autoGrab ? form.grabLoginStateId : null,
         }
 
         if (isEdit.value) {
@@ -479,6 +517,7 @@ onMounted(async () => {
   await authState?.waitForAuth()
   loadConfigList()
   loadLocations()
+  loadLoginStates()
 })
 
 onUnmounted(() => {
@@ -545,6 +584,9 @@ onUnmounted(() => {
               </p>
               <p v-if="config.cron" class="info-item">
                 <span>cron：{{ config.cron }}</span>
+              </p>
+              <p v-if="config.autoGrab" class="info-item">
+                <span>自动抢单：开启（{{ getLoginStateName(config.grabLoginStateId) }}）</span>
               </p>
               <p
                 v-if="config.type === 'MINIMUM_PAY' && config.minimumPayExtNotifyConfig"
@@ -681,6 +723,10 @@ onUnmounted(() => {
             <div v-if="currentDetail.cron" class="detail-item">
               <label>cron 表达式：</label>
               <span>{{ currentDetail.cron }}</span>
+            </div>
+            <div class="detail-item">
+              <label>自动抢单：</label>
+              <span>{{ currentDetail.autoGrab ? `开启（${getLoginStateName(currentDetail.grabLoginStateId)}）` : '关闭' }}</span>
             </div>
           </div>
         </div>
@@ -906,6 +952,22 @@ onUnmounted(() => {
             </el-checkbox>
           </el-form-item>
         </template>
+
+        <!-- 自动抢单：命中美团活动后自动建立抢单任务 -->
+        <el-form-item label="自动抢单">
+          <el-switch v-model="form.autoGrab" />
+          <span class="cron-tip" style="margin-left: 10px">开启后，监控命中美团活动会自动用所选账号建抢单任务</span>
+        </el-form-item>
+        <el-form-item v-if="form.autoGrab" label="抢单账号" prop="grabLoginStateId">
+          <el-select v-model="form.grabLoginStateId" placeholder="请选择抢单账号" style="width: 100%">
+            <el-option
+              v-for="s in loginStateList"
+              :key="s.id"
+              :label="s.name"
+              :value="s.id"
+            />
+          </el-select>
+        </el-form-item>
       </el-form>
 
       <template #footer>
