@@ -86,8 +86,17 @@ function onLoginStateChange() {
   loadCardCount()
 }
 
-function cardTypeLabel(t: number) {
-  return { 1: '超抢券', 2: '延时券', 4: '延时券', 6: '单号修改券', 9: '探店券' }[t] || ('type' + t)
+// 卡券类型标签：优先用 card_type 映射，未知/缺失则回退到卡券自身 name（饭票 cardType 为 null 等）
+function cardTypeLabel(t: number | null | undefined, name?: string) {
+  const map: Record<number, string> = {
+    1: '超前抢单券',
+    2: '延时券',
+    4: '延时券',
+    6: '单号修改券',
+    9: '探店券',
+  }
+  if (t != null && map[t]) return map[t]
+  return name || (t == null ? '卡券' : 'type' + t)
 }
 
 function isExpired(exp: string) {
@@ -139,7 +148,7 @@ onMounted(async () => {
           <div class="card-info">
             <div class="card-name">{{ c.name }}
               <el-tag size="small" :type="isExpired(c.expireTime) ? 'info' : 'success'">
-                {{ cardTypeLabel(c.cardType) }}
+                {{ cardTypeLabel(c.cardType, c.name) }}
               </el-tag>
             </div>
             <div class="card-desc">{{ c.desc }}</div>
