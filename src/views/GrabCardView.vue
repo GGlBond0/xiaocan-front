@@ -16,6 +16,9 @@ const loading = ref(false)
 const pageSize = 15
 const page = ref(1)
 const hasMore = ref(false)
+// 饭票数量汇总（来自 /api/grab/card/count，ticketCount 为饭票 cardId==1 张数）
+const cardCount = ref<{ ticketCount: number; details: any[] } | null>(null)
+const countLoading = ref(false)
 
 async function loadLoginStates() {
   try {
@@ -24,8 +27,24 @@ async function loadLoginStates() {
     if (loginStateList.value.length > 0) {
       selectedLoginStateId.value = loginStateList.value[0].id
       await loadCards()
+      await loadCardCount()
     }
   } catch { /* ignore */ }
+}
+
+async function loadCardCount() {
+  if (selectedLoginStateId.value == null) return
+  countLoading.value = true
+  try {
+    const res = await api.get('/api/grab/card/count', {
+      loginStateId: selectedLoginStateId.value,
+    })
+    cardCount.value = res.data.data || null
+  } catch {
+    cardCount.value = null
+  } finally {
+    countLoading.value = false
+  }
 }
 
 async function loadCards() {
@@ -64,6 +83,7 @@ function nextPage() {
 function onLoginStateChange() {
   page.value = 1
   loadCards()
+  loadCardCount()
 }
 
 function cardTypeLabel(t: number) {
@@ -99,6 +119,19 @@ onMounted(async () => {
       </div>
 
       <div v-if="cardList.length === 0 && !loading" class="empty">暂无卡券</div>
+
+      <div class="card-count-bar" v-loading="countLoading">
+        <template v-if="cardCount">
+          <span class="count-item ticket">
+            饭票：<b>{{ cardCount.ticketCount ?? 0 }}</b> 张
+            <el-tag v-if="(cardCount.ticketCount ?? 0) === 0" size="small" type="danger">不足</el-tag>
+          </span>
+          <span v-for="d in cardCount.details.filter(x => x.cardId !== 1)" :key="d.cardId" class="count-item">
+            {{ d.name }}：<b>{{ d.count }}</b>
+          </span>
+        </template>
+        <span v-else class="count-empty">饭票数量加载中…</span>
+      </div>
       <div class="card-grid" v-loading="loading">
         <div v-for="c in cardList" :key="c.id" class="card-item"
           :class="{ expired: isExpired(c.expireTime) }">
@@ -137,6 +170,17 @@ onMounted(async () => {
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .page-info { color: #606266; font-size: 13px; }
 .empty { text-align: center; color: #c0c4cc; padding: 40px 0; }
+.card-count-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px;
+  padding: 12px 14px; margin-bottom: 16px;
+  background: #f5f7fa; border-radius: 10px; font-size: 13px; color: #606266;
+  min-height: 24px;
+}
+.count-item { display: inline-flex; align-items: center; gap: 4px; }
+.count-item b { color: #303133; font-size: 15px; }
+.count-item.ticket { color: #e6a23c; font-weight: 600; }
+.count-item.ticket b { color: #e6a23c; }
+.count-empty { color: #c0c4cc; }
 .card-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 14px;
