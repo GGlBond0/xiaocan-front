@@ -148,7 +148,7 @@ async function handleSaveBlacklist() {
   }
 }
 
-// ===== 霸王餐刷任务（mini 登录态） =====
+// ===== 霸王餐刷任务（App / Android 登录态） =====
 const lotteryLoading = ref(false)
 const lotteryAuthList = ref<any[]>([])
 // 录入弹窗
@@ -318,11 +318,11 @@ onMounted(async () => {
       </el-form>
     </div>
 
-    <!-- 霸王餐刷任务（mini 登录态） -->
+    <!-- 霸王餐刷任务（App / Android 登录态） -->
     <div class="settings-card lottery-card" v-loading="lotteryLoading">
       <div class="settings-sub-header">
         <h3 class="settings-title">霸王餐刷任务</h3>
-        <p class="settings-desc">自动完成霸王餐抽奖页的"浏览/领取类"任务攒抽奖机会；抽奖仍需手动在小程序过验证后完成（执行抽奖被风控验证拦）</p>
+        <p class="settings-desc">自动完成霸王餐抽奖页的"浏览/领取类"任务攒抽奖机会；登录态用小蚕 App（Android）抓包，比小程序登录态更长效；执行抽奖仍被风控验证拦，需手动完成</p>
       </div>
 
       <div class="lottery-toolbar">
@@ -334,6 +334,7 @@ onMounted(async () => {
         <el-table-column label="别名" prop="name" min-width="120" />
         <el-table-column label="silk_id" prop="silkId" width="120" />
         <el-table-column label="X-Session-Id" prop="sessionId" min-width="160" show-overflow-tooltip />
+        <el-table-column label="城市码" prop="cityCode" width="90" />
         <el-table-column label="更新时间" prop="updateTime" width="160" />
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
@@ -403,7 +404,7 @@ onMounted(async () => {
             v-model="authForm.rawHeaders"
             type="textarea"
             :rows="10"
-            placeholder="粘贴电脑微信小蚕小程序抓包 header（需含 X-Session-Id 与 x-Teemo；可粘贴浏览器开发者工具 Network 面板的某条 gw.xiaocantech.com 请求的 Request Headers，或抓包 JSON"
+            placeholder="粘贴小蚕 App（Android）抓包 header（需含 X-Session-Id、X-Sivir、x-Teemo；可粘贴抓包工具某条 gwh.xiaocantech.com/rpc 请求的 Request Headers，或抓包 JSON）"
           />
         </el-form-item>
       </el-form>
