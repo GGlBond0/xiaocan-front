@@ -23,6 +23,29 @@ const form = reactive({
   requestTimeout: 5000,
 })
 
+// 商家黑名单表单
+const blacklistLoading = ref(false)
+const blacklistSaving = ref(false)
+const blacklistFormRef = ref<FormInstance>()
+const blacklistForm = reactive({
+  enabled: false,
+  keywords: '',
+})
+const blacklistFormRules = {
+  keywords: [
+    {
+      validator: (_rule: any, value: string, callback: any) => {
+        if (value && value.length > 4000) {
+          callback(new Error('关键字规则总长度不能超过 4000 字符'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur',
+    },
+  ],
+}
+
 const formRules = {
   apiUrl: [
     {
@@ -86,9 +109,48 @@ async function handleSave() {
   }
 }
 
+async function loadBlacklist() {
+  blacklistLoading.value = true
+  try {
+    const response = await api.get('/api/blacklist/config')
+    if (response.data.success && response.data.data) {
+      const d = response.data.data
+      blacklistForm.enabled = !!d.enabled
+      blacklistForm.keywords = d.keywords || ''
+    }
+  } catch {
+    // 拦截器已弹错
+  } finally {
+    blacklistLoading.value = false
+  }
+}
+
+async function handleSaveBlacklist() {
+  try {
+    await blacklistFormRef.value?.validate()
+  } catch {
+    return
+  }
+  blacklistSaving.value = true
+  try {
+    const response = await api.put('/api/blacklist/config', {
+      enabled: blacklistForm.enabled,
+      keywords: blacklistForm.keywords,
+    })
+    if (response.data.success) {
+      ElMessage.success('保存成功，配置已即时生效')
+      await loadBlacklist()
+    }
+  } catch {
+    // 拦截器已弹错
+  } finally {
+    blacklistSaving.value = false
+  }
+}
+
 onMounted(async () => {
   await authState?.waitForAuth()
-  await loadConfig()
+  await Promise.all([loadConfig(), loadBlacklist()])
 })
 </script>
 
@@ -135,6 +197,37 @@ onMounted(async () => {
         <el-form-item>
           <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
           <el-button @click="loadConfig">重新读取</el-button>
+        </el-form-item>
+      </el-form>
+    </div>
+
+    <!-- 商家黑名单 -->
+    <div class="settings-card" v-loading="blacklistLoading">
+      <el-form
+        :model="blacklistForm"
+        :rules="blacklistFormRules"
+        ref="blacklistFormRef"
+        label-width="140px"
+        class="config-form"
+      >
+        <el-form-item label="启用黑名单" prop="enabled">
+          <el-switch v-model="blacklistForm.enabled" />
+          <span class="form-hint">关闭后所有商家完全透传，不做任何过滤</span>
+        </el-form-item>
+
+        <el-form-item label="关键字规则" prop="keywords">
+          <el-input
+            v-model="blacklistForm.keywords"
+            type="textarea"
+            :rows="6"
+            placeholder="一行一条规则；行内 & 表示同时包含（AND）；多行为任一命中（OR）；大小写不敏感&#10;示例：&#10;肯德基&#10;麦当劳 & 优惠券&#10;华莱士 & 套餐"
+          />
+          <span class="form-hint">命中关键字的商家在监控推送和抢单时将被过滤</span>
+        </el-form-item>
+
+        <el-form-item>
+          <el-button type="primary" @click="handleSaveBlacklist" :loading="blacklistSaving">保存</el-button>
+          <el-button @click="loadBlacklist">重新读取</el-button>
         </el-form-item>
       </el-form>
     </div>
