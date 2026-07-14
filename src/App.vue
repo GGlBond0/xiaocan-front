@@ -2,6 +2,13 @@
 import { ref, provide, readonly } from 'vue'
 import NavBar from './components/NavBar.vue'
 
+// 自用单用户：写死固定 token 自动带入，免登录弹窗进入主站。
+// （自用项目硬编码，勿提交到公开仓库；token 失效后替换此处即可。）
+const FIXED_TOKEN = '3fbd08ad2d164330'
+if (localStorage.getItem('token') !== FIXED_TOKEN) {
+  localStorage.setItem('token', FIXED_TOKEN)
+}
+
 // 认证状态管理
 const isAuthenticated = ref(false)
 let authResolve: () => void
