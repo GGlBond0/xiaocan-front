@@ -233,9 +233,6 @@ onMounted(() => {
       <router-link to="/grab" class="nav-link" :class="{ active: currentPage === 'grab' }">
         抢单
       </router-link>
-      <router-link to="/grab-login" class="nav-link" :class="{ active: currentPage === 'grab-login' }">
-        抢单登录态
-      </router-link>
       <router-link to="/grab-history" class="nav-link" :class="{ active: currentPage === 'grab-history' }">
         抢单记录
       </router-link>

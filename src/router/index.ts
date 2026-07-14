@@ -25,8 +25,7 @@ const router = createRouter({
     },
     {
       path: '/grab-login',
-      name: 'grab-login',
-      component: () => import('../views/GrabLoginView.vue'),
+      redirect: '/location',
     },
     {
       path: '/grab',

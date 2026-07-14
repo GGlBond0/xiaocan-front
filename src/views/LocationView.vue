@@ -23,17 +23,26 @@ const form = reactive({
   region: [] as string[],
   cityCode: null as number | null,
   addressKeyword: '',
-  selectedAddress: null as any,
+  selectedAddress: null as any
 })
 
 const rules = {
   region: [{ required: true, message: '请选择所在地区', trigger: 'change' }],
-  selectedAddress: [{ required: true, message: '请选择详细地址', trigger: 'change' }],
+  selectedAddress: [{ required: true, message: '请选择详细地址', trigger: 'change' }]
 }
 
 const isAdding = ref(false)
 const isEditing = ref(false)
 const loading = ref(false)
+
+// 每个地址卡片下两个折叠面板的展开状态：key=locationId
+const expandedLogin = ref<Set<string>>(new Set())
+const expandedSpt = ref<Set<string>>(new Set())
+
+// 所有登录态（全量，按 locationId 过滤展示）
+const allLoginStates = ref<any[]>([])
+// 每个地址的推送 spt 缓存：locationId -> spt 列表
+const pushTargetMap = ref<Record<string, any[]>>({})
 
 async function loadAddressList() {
   loading.value = true
@@ -41,6 +50,13 @@ async function loadAddressList() {
     const response = await api.get('/api/location')
     if (response.data.success) {
       addressList.value = response.data.data || []
+      // 展开后加载各自登录态/spt
+      await loadLoginStates()
+      for (const addr of addressList.value) {
+        if (expandedSpt.value.has(String(addr.id))) {
+          loadPushTargets(addr.id)
+        }
+      }
     } else {
       ElMessage.error(response.data.msg || '获取地址列表失败')
     }
@@ -176,7 +192,6 @@ async function submitForm() {
   })
 }
 
-
 function deleteAddress(id: string, index: number) {
   ElMessageBox.confirm('确定要删除这个地址吗？', '提示', {
     confirmButtonText: '确定',
@@ -204,8 +219,211 @@ function deleteAddress(id: string, index: number) {
     })
 }
 
+// ==================== 抢单登录态绑定 ====================
+
+async function loadLoginStates() {
+  try {
+    const res = await api.get('/api/grab/login-state/list')
+    allLoginStates.value = res.data.data || []
+  } catch {
+    // 静默失败，不阻塞地址列表
+  }
+}
+
+function loginStatesOf(locationId: string) {
+  return allLoginStates.value.filter((s: any) => String(s.locationId) === String(locationId))
+}
+
+async function toggleLogin(locationId: string) {
+  if (expandedLogin.value.has(String(locationId))) {
+    expandedLogin.value.delete(String(locationId))
+  } else {
+    expandedLogin.value.add(String(locationId))
+    if (allLoginStates.value.length === 0) await loadLoginStates()
+  }
+}
+
+// 新增登录态对话框
+const loginDialogVisible = ref(false)
+const loginDialogLocationId = ref<string | null>(null)
+const loginForm = reactive({ name: '', rawHeaders: '' })
+const loginEditingId = ref<number | null>(null)
+const loginSaving = ref(false)
+
+function openAddLogin(locationId: string) {
+  loginDialogLocationId.value = locationId
+  loginEditingId.value = null
+  loginForm.name = ''
+  loginForm.rawHeaders = ''
+  loginDialogVisible.value = true
+}
+
+function openEditLogin(row: any) {
+  loginEditingId.value = row.id
+  loginDialogLocationId.value = row.locationId
+  loginForm.name = row.name
+  loginForm.rawHeaders = ''
+  loginDialogVisible.value = true
+}
+
+async function saveLoginState() {
+  if (!loginForm.rawHeaders.trim()) {
+    ElMessage.warning('请粘贴抓包 header')
+    return
+  }
+  loginSaving.value = true
+  try {
+    const config = loginEditingId.value != null ? { params: { id: loginEditingId.value } } : undefined
+    const payload: any = { name: loginForm.name, rawHeaders: loginForm.rawHeaders }
+    if (loginEditingId.value == null && loginDialogLocationId.value) {
+      payload.locationId = Number(loginDialogLocationId.value)
+    }
+    const res = await api.post('/api/grab/login-state', payload, config)
+    ElMessage.success(res.data.data?.msg || '已保存')
+    loginDialogVisible.value = false
+    await loadLoginStates()
+  } catch {
+    // 拦截器已提示
+  } finally {
+    loginSaving.value = false
+  }
+}
+
+async function deleteLogin(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除登录态「${row.name}」？关联的抢单配置将失效。`, '提示', { type: 'warning' })
+  } catch {
+    return
+  }
+  await api.delete(`/api/grab/login-state/${row.id}`)
+  ElMessage.success('已删除')
+  await loadLoginStates()
+}
+
+// ==================== 推送 spt 绑定 ====================
+
+async function loadPushTargets(locationId: string) {
+  try {
+    const res = await api.get(`/api/location/${locationId}/push-target`)
+    pushTargetMap.value[String(locationId)] = res.data.data || []
+  } catch {
+    pushTargetMap.value[String(locationId)] = []
+  }
+}
+
+function pushTargetsOf(locationId: string) {
+  return pushTargetMap.value[String(locationId)] || []
+}
+
+async function toggleSpt(locationId: string) {
+  if (expandedSpt.value.has(String(locationId))) {
+    expandedSpt.value.delete(String(locationId))
+  } else {
+    expandedSpt.value.add(String(locationId))
+    await loadPushTargets(locationId)
+  }
+}
+
+// 新增/编辑 spt 对话框
+const sptDialogVisible = ref(false)
+const sptEditingId = ref<number | null>(null)
+const sptDialogLocationId = ref<string | null>(null)
+const sptForm = reactive({ id: null as number | null, spt: '', remark: '', enabled: true, sort: 0 })
+const sptSaving = ref(false)
+
+function openAddSpt(locationId: string) {
+  sptDialogLocationId.value = locationId
+  sptEditingId.value = null
+  sptForm.id = null
+  sptForm.spt = ''
+  sptForm.remark = ''
+  sptForm.enabled = true
+  sptForm.sort = 0
+  sptDialogVisible.value = true
+}
+
+function openEditSpt(row: any, locationId: string) {
+  sptDialogLocationId.value = locationId
+  sptEditingId.value = row.id
+  sptForm.id = row.id
+  sptForm.spt = row.spt
+  sptForm.remark = row.remark || ''
+  sptForm.enabled = row.enabled
+  sptForm.sort = row.sort || 0
+  sptDialogVisible.value = true
+}
+
+async function saveSpt() {
+  if (!sptForm.spt.trim()) {
+    ElMessage.warning('请填写 spt')
+    return
+  }
+  sptSaving.value = true
+  try {
+    if (sptEditingId.value != null) {
+      await api.put(`/api/location/${sptDialogLocationId.value}/push-target`, {
+        id: sptForm.id,
+        spt: sptForm.spt.trim(),
+        remark: sptForm.remark,
+        enabled: sptForm.enabled,
+        sort: sptForm.sort,
+      })
+    } else {
+      await api.post(`/api/location/${sptDialogLocationId.value}/push-target`, {
+        spt: sptForm.spt.trim(),
+        remark: sptForm.remark,
+        enabled: sptForm.enabled,
+        sort: sptForm.sort,
+      })
+    }
+    ElMessage.success('已保存')
+    sptDialogVisible.value = false
+    await loadPushTargets(sptDialogLocationId.value!)
+  } catch {
+    // 拦截器已提示
+  } finally {
+    sptSaving.value = false
+  }
+}
+
+async function toggleSptEnabled(row: any, locationId: string) {
+  try {
+    await api.put(`/api/location/${locationId}/push-target`, {
+      id: row.id,
+      enabled: row.enabled,
+    })
+    ElMessage.success(row.enabled ? '已启用' : '已停用')
+  } catch {
+    // 失败回滚
+    row.enabled = !row.enabled
+  }
+}
+
+async function deleteSpt(row: any, locationId: string) {
+  try {
+    await ElMessageBox.confirm('确定删除该推送 spt？', '提示', { type: 'warning' })
+  } catch {
+    return
+  }
+  await api.delete(`/api/location/${locationId}/push-target/${row.id}`)
+  ElMessage.success('已删除')
+  await loadPushTargets(locationId)
+}
+
+async function testPush(locationId: string) {
+  try {
+    await api.post(`/api/location/${locationId}/push-target/test`)
+    ElMessage.success('已发送测试推送，请到对应微信查看')
+  } catch {
+    // 拦截器已提示
+  }
+}
+
+function loginStatusType(s: string) {
+  return { '有效': 'success', '即将过期': 'warning', '已过期': 'danger', '未知': 'info' }[s] || 'info'
+}
+
 onMounted(async () => {
-  // 等待认证完成
   await authState?.waitForAuth()
   loadAddressList()
   loadRegionOptions()
@@ -249,13 +467,68 @@ onMounted(async () => {
 
             <p class="address-main">{{ address.address }}</p>
 
+            <!-- 抢单登录态绑定段 -->
+            <div class="binding-section">
+              <div class="binding-title" @click="toggleLogin(address.id)">
+                <span>
+                  <el-icon class="toggle-icon" :class="{ expanded: expandedLogin.has(String(address.id)) }">▶</el-icon>
+                  抢单登录态
+                  <el-tag size="small" type="info" class="count-tag">{{ loginStatesOf(address.id).length }}</el-tag>
+                </span>
+                <el-button size="small" @click.stop="openAddLogin(address.id)">+ 绑定登录态</el-button>
+              </div>
+              <div v-if="expandedLogin.has(String(address.id))" class="binding-body">
+                <div v-if="loginStatesOf(address.id).length === 0" class="binding-empty">该地址暂无绑定登录态</div>
+                <div v-else>
+                  <div v-for="s in loginStatesOf(address.id)" :key="s.id" class="login-row">
+                    <span class="login-name">{{ s.name }}</span>
+                    <el-tag size="small" :type="loginStatusType(s.expireStatus)">{{ s.expireStatus }}</el-tag>
+                    <span class="login-expire">{{ s.expireAt }}</span>
+                    <div class="login-ops">
+                      <el-button size="small" link @click="openEditLogin(s)">更新</el-button>
+                      <el-button size="small" link type="danger" @click="deleteLogin(s)">删除</el-button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 推送 spt 绑定段 -->
+            <div class="binding-section">
+              <div class="binding-title" @click="toggleSpt(address.id)">
+                <span>
+                  <el-icon class="toggle-icon" :class="{ expanded: expandedSpt.has(String(address.id)) }">▶</el-icon>
+                  推送 spt
+                  <el-tag size="small" type="info" class="count-tag">{{ pushTargetsOf(address.id).length }}</el-tag>
+                </span>
+                <span>
+                  <el-button size="small" link @click.stop="testPush(address.id)">测试推送</el-button>
+                  <el-button size="small" @click.stop="openAddSpt(address.id)">+ 新增 spt</el-button>
+                </span>
+              </div>
+              <div v-if="expandedSpt.has(String(address.id))" class="binding-body">
+                <div v-if="pushTargetsOf(address.id).length === 0" class="binding-empty">
+                  该地址暂无推送 spt，命中时将回退用户默认 spt
+                </div>
+                <div v-else>
+                  <div v-for="t in pushTargetsOf(address.id)" :key="t.id" class="spt-row">
+                    <span class="spt-value">{{ t.spt }}</span>
+                    <span class="spt-remark">{{ t.remark }}</span>
+                    <el-switch size="small" v-model="t.enabled" @change="toggleSptEnabled(t, address.id)" />
+                    <el-button size="small" link @click="openEditSpt(t, address.id)">编辑</el-button>
+                    <el-button size="small" link type="danger" @click="deleteSpt(t, address.id)">删除</el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="operation-buttons">
               <el-button
                 class="delete-btn"
                 @click="deleteAddress(address.id, index)"
                 :disabled="loading"
               >
-                删除
+                删除地址
               </el-button>
             </div>
           </div>
@@ -314,7 +587,6 @@ onMounted(async () => {
           </div>
         </el-form-item>
 
-     
 
 
         <div class="form-actions">
@@ -323,6 +595,46 @@ onMounted(async () => {
         </div>
       </el-form>
     </el-card>
+
+    <!-- 新增/编辑登录态对话框 -->
+    <el-dialog v-model="loginDialogVisible" :title="loginEditingId != null ? '更新登录态' : '新增登录态'" width="560px" align-center>
+      <el-form label-width="90px">
+        <el-form-item label="别名">
+          <el-input v-model="loginForm.name" placeholder="如 主账号/小号" />
+        </el-form-item>
+        <el-form-item label="抓包header">
+          <el-input v-model="loginForm.rawHeaders" type="textarea" :rows="10"
+            placeholder="粘贴抓包 header（含 X-Sivir/X-Session-Id/X-Vayne/X-Teemo/X-Nami）或抓包 JSON" />
+        </el-form-item>
+        <div v-if="loginEditingId != null" class="hint">留空则保留原登录态，填写则覆盖（重新抓包后粘贴新值）。</div>
+      </el-form>
+      <template #footer>
+        <el-button @click="loginDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="loginSaving" @click="saveLoginState">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新增/编辑推送 spt 对话框 -->
+    <el-dialog v-model="sptDialogVisible" :title="sptEditingId != null ? '编辑推送 spt' : '新增推送 spt'" width="500px" align-center>
+      <el-form label-width="80px">
+        <el-form-item label="spt" required>
+          <el-input v-model="sptForm.spt" placeholder="WxPusher spt" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="sptForm.remark" placeholder="如 主微信/小号微信" />
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="sptForm.enabled" />
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="sptForm.sort" :min="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="sptDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="sptSaving" @click="saveSpt">保存</el-button>
+      </template>
+    </el-dialog>
 
   </div>
 </template>
@@ -358,7 +670,7 @@ onMounted(async () => {
 // ============================================
 .address-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   gap: 20px;
 }
 
@@ -402,6 +714,105 @@ onMounted(async () => {
 }
 
 // ============================================
+// Binding sections (登录态 / spt)
+// ============================================
+.binding-section {
+  border-top: 1px dashed #ebeef5;
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+.binding-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
+  user-select: none;
+
+  .toggle-icon {
+    font-size: 10px;
+    margin-right: 4px;
+    transition: transform 0.2s;
+
+    &.expanded {
+      transform: rotate(90deg);
+    }
+  }
+
+  .count-tag {
+    margin-left: 6px;
+  }
+}
+
+.binding-body {
+  margin-top: 10px;
+}
+
+.binding-empty {
+  font-size: 12px;
+  color: #c0c4cc;
+  padding: 6px 0;
+}
+
+.login-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 0;
+  border-bottom: 1px solid #f5f7fa;
+
+  .login-name {
+    font-size: 13px;
+    color: #333;
+    font-weight: 500;
+  }
+
+  .login-expire {
+    font-size: 12px;
+    color: #909399;
+  }
+
+  .login-ops {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+  }
+}
+
+.spt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f5f7fa;
+
+  .spt-value {
+    font-size: 12px;
+    font-family: monospace;
+    color: #333;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .spt-remark {
+    font-size: 12px;
+    color: #909399;
+    flex: 1;
+  }
+}
+
+.hint {
+  color: #e6a23c;
+  font-size: 12px;
+}
+
+// ============================================
 // Buttons
 // ============================================
 .operation-buttons {
@@ -410,17 +821,6 @@ onMounted(async () => {
   justify-content: flex-end;
   align-items: center;
   margin-top: 15px;
-}
-
-.edit-btn {
-  background-color: #f0f7ff !important;
-  color: #1890ff !important;
-  border-color: #bbd7ff !important;
-
-  &:hover {
-    background-color: #e6f7ff !important;
-    transform: translateY(-2px);
-  }
 }
 
 .delete-btn {

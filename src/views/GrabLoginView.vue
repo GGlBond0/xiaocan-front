@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, inject } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 import api from '../api'
 
+const router = useRouter()
 const authState = inject<{
   isAuthenticated: { value: boolean }
   setAuthenticated: () => void
@@ -11,11 +13,6 @@ const authState = inject<{
 
 const stateList = ref<any[]>([])
 const loading = ref(false)
-const saving = ref(false)
-
-const dialogVisible = ref(false)
-const editingId = ref<number | null>(null)
-const form = ref({ name: '', rawHeaders: '' })
 
 async function loadList() {
   loading.value = true
@@ -27,35 +24,7 @@ async function loadList() {
   }
 }
 
-function openAdd() {
-  editingId.value = null
-  form.value = { name: '', rawHeaders: '' }
-  dialogVisible.value = true
-}
-
-function openEdit(row: any) {
-  editingId.value = row.id
-  form.value = { name: row.name, rawHeaders: '' }
-  dialogVisible.value = true
-}
-
-async function handleSave() {
-  if (!form.value.rawHeaders.trim()) {
-    ElMessage.warning('请粘贴抓包 header')
-    return
-  }
-  saving.value = true
-  try {
-    const config = editingId.value != null ? { params: { id: editingId.value } } : undefined
-    const res = await api.post('/api/grab/login-state', form.value, config)
-    ElMessage.success(res.data.data?.msg || '已保存')
-    dialogVisible.value = false
-    await loadList()
-  } finally {
-    saving.value = false
-  }
-}
-
+// 仅保留删除（用于清理无法迁移的老记录）；新增/更新入口已下线，请到地址管理页管理登录态
 async function handleDelete(row: any) {
   try {
     await ElMessageBox.confirm(`确定删除登录态「${row.name}」？关联的抢单配置将失效。`, '提示', { type: 'warning' })
@@ -65,6 +34,10 @@ async function handleDelete(row: any) {
   await api.delete(`/api/grab/login-state/${row.id}`)
   ElMessage.success('已删除')
   await loadList()
+}
+
+function goLocation() {
+  router.push('/location')
 }
 
 function statusType(s: string) {
@@ -82,49 +55,41 @@ onMounted(async () => {
     <div class="page-card">
       <div class="header-row">
         <h2 class="page-title">抢单登录态</h2>
-        <el-button type="primary" @click="openAdd">新增登录态</el-button>
+        <el-button type="primary" @click="goLocation">去地址管理页管理</el-button>
       </div>
-      <p class="page-desc">
-        可保存多组小蚕登录态（如主账号/小号）。在小蚕 App 抓包一次抢单请求，把请求头整段粘贴录入。
-        抢单配置可绑定其中一组。JWT 过期后需重新录入。
-      </p>
+      <el-alert
+        class="migrate-tip"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="登录态已改为在「地址管理」页按地址管理"
+        description="新增、更新登录态请进入对应地址卡片操作。此处仅保留只读列表与删除，便于迁移未绑地址的老记录（locationId 为空）。"
+      />
 
       <el-table :data="stateList" v-loading="loading" style="width: 100%" stripe>
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="别名" width="140" />
         <el-table-column prop="xcUserId" label="小蚕用户ID" width="110" />
         <el-table-column prop="silkId" label="silk_id" width="110" />
+        <el-table-column label="所属地址" width="140">
+          <template #default="{ row }">
+            <el-tag v-if="row.locationId" size="small" type="success">{{ row.locationName || row.locationId }}</el-tag>
+            <el-tag v-else size="small" type="warning">未绑定</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="expireAt" label="过期时间" width="180" />
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="statusType(row.expireStatus)">{{ row.expireStatus }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="openEdit(row)">更新</el-button>
             <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
-
-    <el-dialog v-model="dialogVisible" :title="editingId != null ? '更新登录态' : '新增登录态'" width="560px" align-center>
-      <el-form label-width="90px">
-        <el-form-item label="别名">
-          <el-input v-model="form.name" placeholder="如 主账号/小号" />
-        </el-form-item>
-        <el-form-item label="抓包header">
-          <el-input v-model="form.rawHeaders" type="textarea" :rows="10"
-            placeholder="粘贴抓包 header（含 X-Sivir/X-Session-Id/X-Vayne/X-Teemo/X-Nami）或抓包 JSON" />
-        </el-form-item>
-        <div v-if="editingId != null" class="hint">留空则保留原登录态，填写则覆盖（重新抓包后粘贴新值）。</div>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -149,14 +114,7 @@ onMounted(async () => {
   margin: 0;
   color: #2c3e50;
 }
-.page-desc {
-  color: #909399;
-  font-size: 13px;
-  line-height: 1.6;
-  margin: 0 0 16px;
-}
-.hint {
-  color: #e6a23c;
-  font-size: 12px;
+.migrate-tip {
+  margin: 16px 0;
 }
 </style>
