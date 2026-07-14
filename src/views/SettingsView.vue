@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, inject } from 'vue'
+import { ref, reactive, onMounted, inject, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import api from '../api'
@@ -155,6 +155,46 @@ const selectedLoginStateId = ref<number | null>(null)
 // 刷任务
 const runLoading = ref(false)
 const runResult = ref<any>(null)
+
+// 机会变化：刷前/刷后任一缺失则显示 —，避免 NaN
+const chanceDelta = computed(() => {
+  const before = runResult.value?.beforeCount
+  const after = runResult.value?.afterCount
+  if (before == null || after == null) return '—'
+  return after - before
+})
+
+// 失败提示文案映射：把后端透传的原始错误转成用户可理解的提示
+const friendlyError = computed(() => {
+  const raw = runResult.value?.error
+  if (!raw) return ''
+  // 代理/网关类失败
+  if (raw.includes('状态码错误:-1') || raw.includes('状态码错误:403')) {
+    return '代理池当前不可用（全部 403 或超时），请到「代理设置」更换可用代理后重试'
+  }
+  if (raw.includes('代理不可用')) {
+    return '代理池为空，请到「代理设置」配置可用代理后重试'
+  }
+  if (raw.includes('无权操作该登录态')) {
+    return '无权操作该登录态，请重新选择或刷新登录态列表'
+  }
+  if (raw.includes('登录态不完整')) {
+    return '登录态不完整（silk_id / X-Session-Id / X-Sivir 缺失），请到「登录态管理」补全或重新录入'
+  }
+  return raw
+})
+
+// 单任务展示态：优先用后端 status，无 status 时按 ok 兜底降级
+// 返回 { cls, label }：cls 用于着色（skip/ok/fail），label 为状态文案
+function taskDisplay(item: any): { cls: string; label: string } {
+  if (item?.status === 'SKIPPED') return { cls: 'skip', label: '已完成' }
+  if (item?.status === 'OK') return { cls: 'ok', label: '成功' }
+  if (item?.status === 'FAIL') return { cls: 'fail', label: '失败' }
+  // 降级：旧结构只有 ok
+  if (item?.ok === true) return { cls: 'ok', label: '成功' }
+  if (item?.ok === false && item?.msg) return { cls: 'fail', label: '失败' }
+  return { cls: 'skip', label: '已完成' }
+}
 
 async function loadLoginStates() {
   lotteryLoading.value = true
@@ -316,7 +356,7 @@ onMounted(async () => {
           </div>
           <div class="lottery-result-cell">
             <span class="lottery-result-label">机会变化</span>
-            <span class="lottery-result-value" :class="{ ok: runResult.afterCount - runResult.beforeCount > 0 }">{{ runResult.afterCount - runResult.beforeCount }}</span>
+            <span class="lottery-result-value" :class="{ ok: typeof chanceDelta === 'number' && chanceDelta > 0 }">{{ chanceDelta }}</span>
           </div>
         </div>
 
@@ -324,12 +364,15 @@ onMounted(async () => {
           <div class="lottery-tasks-title">完成明细</div>
           <div v-for="item in runResult.tasks" :key="item.type" class="lottery-task-item">
             <span class="lottery-task-type">{{ item.desc }}</span>
-            <span class="lottery-task-state" :class="item.ok ? 'ok' : 'fail'">{{ item.ok ? '成功' : '失败' }}</span>
-            <span class="lottery-task-msg" v-if="item.msg">{{ item.msg }}</span>
+            <span class="lottery-task-state" :class="taskDisplay(item).cls">{{ taskDisplay(item).label }}</span>
+            <span class="lottery-task-msg" v-if="item.msg && taskDisplay(item).cls !== 'skip'">{{ item.msg }}</span>
           </div>
         </div>
 
-        <div v-if="runResult && runResult.error" class="lottery-result-error">{{ runResult.error }}</div>
+        <div v-if="runResult && runResult.error" class="lottery-result-error">
+          <span class="lottery-error-tip">失败：{{ friendlyError }}</span>
+          <span class="lottery-error-raw" v-if="friendlyError !== runResult.error">（原始：{{ runResult.error }}）</span>
+        </div>
       </div>
     </div>
   </div>
@@ -494,6 +537,10 @@ $radius-lg: 16px;
   color: #ef4444;
 }
 
+.lottery-task-state.skip {
+  color: $text-hint;
+}
+
 .lottery-task-msg {
   color: $text-hint;
   font-size: 12px;
@@ -503,6 +550,18 @@ $radius-lg: 16px;
   margin-top: 8px;
   color: #ef4444;
   font-size: 13px;
+
+  .lottery-error-tip {
+    display: block;
+    line-height: 1.5;
+  }
+
+  .lottery-error-raw {
+    display: block;
+    margin-top: 2px;
+    color: $text-hint;
+    font-size: 12px;
+  }
 }
 
 @media screen and (max-width: 768px) {
