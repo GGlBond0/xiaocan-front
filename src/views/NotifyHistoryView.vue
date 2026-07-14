@@ -13,6 +13,7 @@ const loading = ref(false)
 const searchForm = reactive({
   notifyConfigId: null as number | null,
   notifyType: null as string | null,
+  recentMinutes: null as number | null,
   pageNum: 1,
   pageSize: 20,
 })
@@ -42,6 +43,15 @@ async function handleSearch(resetPage = true) {
   }
 
   loading.value = resetPage
+
+  // 选中某监控配置时，按该配置的去重/过期分钟数过滤记录页（仅显示最近 N 分钟）
+  if (searchForm.notifyConfigId) {
+    const cfg = notifyConfigList.value.find((c: any) => c.id === searchForm.notifyConfigId)
+    const dm = cfg?.minimumPayExtNotifyConfig?.dedupMinutes
+    searchForm.recentMinutes = dm ? Number(dm) : null
+  } else {
+    searchForm.recentMinutes = null
+  }
 
   try {
     const response = await api.post('/api/notify-history/page', searchForm)

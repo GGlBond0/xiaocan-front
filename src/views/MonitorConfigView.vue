@@ -63,6 +63,7 @@ const form = reactive({
   minimumPayExtNotifyConfig: {
     minimumPay: 1,
     within3km: false,
+    dedupMinutes: 60,
   },
   storeKeywordExtNotifyConfig: {
     keyword: '',
@@ -261,7 +262,7 @@ function resetForm() {
   form.endHour = 22
   form.weeks = []
   form.cron = ''
-  form.minimumPayExtNotifyConfig = { minimumPay: 1, within3km: false }
+  form.minimumPayExtNotifyConfig = { minimumPay: 1, within3km: false, dedupMinutes: 60 }
   form.storeKeywordExtNotifyConfig = { keyword: '', limitDistance: true, within3km: false }
   cronCollapseActive.value = []
   configType.value = 'MINIMUM_PAY'
@@ -290,6 +291,7 @@ function showEditDialog(config: any) {
   if (config.type === 'MINIMUM_PAY' && config.minimumPayExtNotifyConfig) {
     form.minimumPayExtNotifyConfig.minimumPay = config.minimumPayExtNotifyConfig.minimumPay
     form.minimumPayExtNotifyConfig.within3km = config.minimumPayExtNotifyConfig.within3km === true
+    form.minimumPayExtNotifyConfig.dedupMinutes = config.minimumPayExtNotifyConfig.dedupMinutes ?? 60
   }
   if (config.type === 'STORE_KEYWORD' && config.storeKeywordExtNotifyConfig) {
     form.storeKeywordExtNotifyConfig.keyword = config.storeKeywordExtNotifyConfig.keyword
@@ -881,6 +883,16 @@ onUnmounted(() => {
             <el-checkbox v-model="form.minimumPayExtNotifyConfig.within3km">
               开启后仅推送距离 3km（3000 米）以内的门店
             </el-checkbox>
+          </el-form-item>
+          <el-form-item label="去重/过期分钟">
+            <el-input-number
+              v-model="form.minimumPayExtNotifyConfig.dedupMinutes"
+              :min="1"
+              :step="10"
+              controls-position="right"
+              style="width: 100%"
+            />
+            <p class="cron-tip">同店 N 分钟内不重复通知；超过 N 分钟的旧记录自动删除，记录页仅显示最近 N 分钟</p>
           </el-form-item>
         </template>
 
