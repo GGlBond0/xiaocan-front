@@ -134,15 +134,15 @@ onMounted(async () => {
         <el-table-column prop="updateTime" label="更新时间" width="160" />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" @click="openEdit(row)">重新录入</el-button>
             <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <!-- 录入/编辑登录态弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editingId != null ? '编辑登录态' : '新增登录态'" width="640px" align-center>
+    <!-- 录入/重新录入登录态弹窗 -->
+    <el-dialog v-model="dialogVisible" :title="editingId != null ? '重新录入登录态' : '新增登录态'" width="640px" align-center>
       <el-form label-width="100px">
         <el-form-item label="别名">
           <el-input v-model="form.name" placeholder="如 主账号/小号" />
@@ -156,7 +156,7 @@ onMounted(async () => {
           <el-input v-model="form.rawHeaders" type="textarea" :rows="10"
             placeholder="粘贴抓包 header（需含 X-Sivir / X-Session-Id / X-Vayne / X-Teemo / X-Nami）或抓包 JSON" />
         </el-form-item>
-        <div class="hint">{{ editingId != null ? '编辑需重新粘贴抓包 header，同一小蚕账号会覆盖原记录。' : '同一个小蚕账号会自动更新而非重复新增。换 token 或改名直接重新粘贴即可。' }}</div>
+        <div class="hint">{{ editingId != null ? '重新粘贴抓包 header，同一小蚕账号会覆盖原记录（换 token/改名/换地址）。' : '同一个小蚕账号会自动更新而非重复新增。换 token 或改名直接重新粘贴即可。' }}</div>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
