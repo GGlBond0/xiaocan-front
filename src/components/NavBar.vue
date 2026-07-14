@@ -245,6 +245,9 @@ onMounted(() => {
       <router-link to="/notify-history" class="nav-link" :class="{ active: currentPage === 'notify-history' }">
         通知记录
       </router-link>
+      <router-link to="/settings" class="nav-link" :class="{ active: currentPage === 'settings' }">
+        设置
+      </router-link>
     </div>
   </nav>
 

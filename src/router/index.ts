@@ -43,6 +43,11 @@ const router = createRouter({
       name: 'grab-card',
       component: () => import('../views/GrabCardView.vue'),
     },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('../views/SettingsView.vue'),
+    },
   ],
 })
 
