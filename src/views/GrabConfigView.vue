@@ -63,13 +63,15 @@ const storeQuery = reactive({
 const showMeituan = ref(true)
 const showEleme = ref(true)
 const showJd = ref(true)
+// 3km 内筛选，默认开启（distance 单位为米，<=3000 即 3km）
+const onlyWithin3km = ref(true)
 const filteredStoreList = computed(() =>
   storeList.value.filter((s: any) => {
     if (s.type === 1) return showMeituan.value
     if (s.type === 2) return showEleme.value
     if (s.type === 3) return showJd.value
     return true
-  }),
+  }).filter((s: any) => !onlyWithin3km.value || (s.distance != null && s.distance <= 3000)),
 )
 
 function resetForm() {
@@ -422,6 +424,7 @@ onMounted(async () => {
     <el-dialog v-model="storeDialogVisible" title="选择要抢的活动" width="1080px" align-center>
       <div class="store-toolbar">
         <el-checkbox v-model="storeQuery.onlyAvailable" @change="loadStores">仅看可抢</el-checkbox>
+        <el-checkbox v-model="onlyWithin3km">3km内</el-checkbox>
         <span class="plat-filter-label">平台：</span>
         <el-checkbox v-model="showMeituan">美团</el-checkbox>
         <el-checkbox v-model="showEleme">饿了么</el-checkbox>
