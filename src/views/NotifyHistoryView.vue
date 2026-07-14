@@ -13,7 +13,6 @@ const loading = ref(false)
 const searchForm = reactive({
   notifyConfigId: null as number | null,
   notifyType: null as string | null,
-  recentMinutes: null as number | null,
   pageNum: 1,
   pageSize: 20,
 })
@@ -25,6 +24,10 @@ const pagination = reactive({
 
 const notifyConfigList = ref<any[]>([])
 const locationList = ref<any[]>([])
+
+// 全局去重/过期分钟数（后端按此值过滤记录页 + 控制去重/清理）
+const dedupMinutes = ref(60)
+const dedupSaving = ref(false)
 
 const notifyTypeOptions = [
   { label: '指定门店', value: 'STORE_ACTIVITY' },
@@ -43,15 +46,6 @@ async function handleSearch(resetPage = true) {
   }
 
   loading.value = resetPage
-
-  // 选中某监控配置时，按该配置的去重/过期分钟数过滤记录页（仅显示最近 N 分钟）
-  if (searchForm.notifyConfigId) {
-    const cfg = notifyConfigList.value.find((c: any) => c.id === searchForm.notifyConfigId)
-    const dm = cfg?.minimumPayExtNotifyConfig?.dedupMinutes
-    searchForm.recentMinutes = dm ? Number(dm) : null
-  } else {
-    searchForm.recentMinutes = null
-  }
 
   try {
     const response = await api.post('/api/notify-history/page', searchForm)
@@ -167,6 +161,38 @@ async function loadLocations() {
   }
 }
 
+async function loadDedupMinutes() {
+  try {
+    const response = await api.get('/api/notify-history/dedup-minutes')
+    if (response.data.success) {
+      dedupMinutes.value = response.data.data ?? 60
+    }
+  } catch {
+    // 静默失败
+  }
+}
+
+async function saveDedupMinutes() {
+  if (!dedupMinutes.value || dedupMinutes.value < 1) {
+    ElMessage.warning('分钟数需 >= 1')
+    return
+  }
+  dedupSaving.value = true
+  try {
+    const response = await api.put('/api/notify-history/dedup-minutes', { minutes: dedupMinutes.value })
+    if (response.data.success) {
+      ElMessage.success('已保存，记录页按此分钟数显示')
+      handleSearch()
+    } else {
+      ElMessage.error(response.data.msg || '保存失败')
+    }
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    dedupSaving.value = false
+  }
+}
+
 function getConfigLabel(config: any) {
   const locName = locationList.value.find((l: any) => l.id === config.locationId)?.name || '未知位置'
   const typeName = getNotifyTypeName(config.type)
@@ -238,7 +264,7 @@ function formatTime(dateStr: string) {
 
 onMounted(async () => {
   await authState?.waitForAuth()
-  await Promise.all([loadNotifyConfigList(), loadLocations()])
+  await Promise.all([loadNotifyConfigList(), loadLocations(), loadDedupMinutes()])
   handleSearch()
   initScrollObserver()
 })
@@ -315,7 +341,20 @@ onBeforeUnmount(() => {
             </el-option>
           </el-select>
         </div>
+        <div class="filter-divider"></div>
+        <div class="filter-body dedup-body">
+          <span class="filter-label">最近分钟</span>
+          <el-input-number
+            v-model="dedupMinutes"
+            :min="1"
+            :step="10"
+            :controls="false"
+            class="dedup-input"
+          />
+          <el-button size="small" type="primary" :loading="dedupSaving" @click="saveDedupMinutes">保存</el-button>
+        </div>
       </div>
+      <div class="dedup-tip">同店 N 分钟内不重复通知；超过 N 分钟的旧记录自动删除，本页仅显示最近 N 分钟</div>
     </div>
 
     <!-- Content area -->
@@ -588,6 +627,21 @@ $radius-full: 999px;
   height: 28px;
   background: $border;
   flex-shrink: 0;
+}
+
+.dedup-body {
+  flex: 0 0 auto;
+}
+
+.dedup-input {
+  width: 110px;
+}
+
+.dedup-tip {
+  margin-top: 8px;
+  padding: 0 18px;
+  font-size: 12px;
+  color: $text-hint;
 }
 
 .filter-label {
