@@ -22,7 +22,7 @@ const countLoading = ref(false)
 
 async function loadLoginStates() {
   try {
-    const res = await api.get('/api/grab/login-state/list')
+    const res = await api.get('/api/login-state/list')
     loginStateList.value = res.data.data || []
     if (loginStateList.value.length > 0) {
       selectedLoginStateId.value = loginStateList.value[0].id
@@ -130,7 +130,7 @@ onMounted(async () => {
           <el-select v-model="selectedLoginStateId" placeholder="选择登录态" style="width: 200px"
             @change="onLoginStateChange">
             <el-option v-for="s in loginStateList" :key="s.id"
-              :label="`${s.name}（用户${s.xcUserId}）`" :value="s.id" />
+              :label="`${s.name}（用户${s.userVayne}）`" :value="s.id" />
           </el-select>
           <el-button size="small" @click="loadCards" :loading="loading">刷新</el-button>
           <el-button size="small" @click="prevPage" :disabled="page <= 1">上一页</el-button>

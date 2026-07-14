@@ -222,7 +222,7 @@ function deleteAddress(id: string, index: number) {
 
 async function loadLoginStates() {
   try {
-    const res = await api.get('/api/grab/login-state/list')
+    const res = await api.get('/api/login-state/list')
     allLoginStates.value = res.data.data || []
   } catch {
     // 静默失败，不阻塞地址列表
@@ -277,7 +277,7 @@ async function saveLoginState() {
     if (loginEditingId.value == null && loginDialogLocationId.value) {
       payload.locationId = Number(loginDialogLocationId.value)
     }
-    const res = await api.post('/api/grab/login-state', payload, config)
+    const res = await api.post('/api/login-state', payload, config)
     ElMessage.success(res.data.data?.msg || '已保存')
     loginDialogVisible.value = false
     await loadLoginStates()
@@ -294,7 +294,7 @@ async function deleteLogin(row: any) {
   } catch {
     return
   }
-  await api.delete(`/api/grab/login-state/${row.id}`)
+  await api.delete(`/api/login-state/${row.id}`)
   ElMessage.success('已删除')
   await loadLoginStates()
 }
@@ -605,7 +605,7 @@ onMounted(async () => {
           <el-input v-model="loginForm.rawHeaders" type="textarea" :rows="10"
             placeholder="粘贴抓包 header（含 X-Sivir/X-Session-Id/X-Vayne/X-Teemo/X-Nami）或抓包 JSON" />
         </el-form-item>
-        <div v-if="loginEditingId != null" class="hint">留空则保留原登录态，填写则覆盖（重新抓包后粘贴新值）。</div>
+        <div v-if="loginEditingId != null" class="hint">更新登录态需重新粘贴抓包 header，同一小蚕账号会自动覆盖原记录。</div>
       </el-form>
       <template #footer>
         <el-button @click="loginDialogVisible = false">取消</el-button>

@@ -110,7 +110,7 @@ async function loadLocations() {
 
 async function loadLoginStates() {
   try {
-    const res = await api.get('/api/grab/login-state/list')
+    const res = await api.get('/api/login-state/list')
     loginStateList.value = res.data.data || []
   } catch {
     /* ignore */
@@ -372,9 +372,9 @@ onMounted(async () => {
         <el-form-item label="登录态" prop="loginStateId">
           <el-select v-model="form.loginStateId" placeholder="选择抢单账号" style="width: 100%">
             <el-option v-for="s in loginStateList" :key="s.id"
-              :label="`${s.name}（用户${s.xcUserId}${s.expireStatus === '已过期' ? '/已过期' : ''}）`" :value="s.id" />
+              :label="`${s.name}（用户${s.userVayne}${s.expireStatus === '已过期' ? '/已过期' : ''}）`" :value="s.id" />
           </el-select>
-          <div class="hint" v-if="loginStateList.length === 0">未录入登录态，请先到「抢单登录态」页面新增</div>
+          <div class="hint" v-if="loginStateList.length === 0">未录入登录态，请先到「登录态管理」页面新增</div>
         </el-form-item>
         <el-form-item label="位置" prop="locationId">
           <el-select v-model="form.locationId" placeholder="选择位置" style="width: 100%">

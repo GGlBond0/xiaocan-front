@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, inject } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import type { FormInstance } from 'element-plus'
 import api from '../api'
 
@@ -148,24 +148,23 @@ async function handleSaveBlacklist() {
   }
 }
 
-// ===== 霸王餐刷任务（App / Android 登录态） =====
+// ===== 霸王餐刷任务（统一登录态） =====
 const lotteryLoading = ref(false)
-const lotteryAuthList = ref<any[]>([])
-// 录入弹窗
-const authDialogVisible = ref(false)
-const authSaving = ref(false)
-const authForm = reactive({ name: '', rawHeaders: '' })
-const authEditingId = ref<number | null>(null)
+const loginStateList = ref<any[]>([])
+const selectedLoginStateId = ref<number | null>(null)
 // 刷任务
-const runLoading = ref<number | null>(null)
+const runLoading = ref(false)
 const runResult = ref<any>(null)
 
-async function loadLotteryAuth() {
+async function loadLoginStates() {
   lotteryLoading.value = true
   try {
-    const response = await api.get('/api/lottery/auth/list')
+    const response = await api.get('/api/login-state/list')
     if (response.data.success) {
-      lotteryAuthList.value = response.data.data || []
+      loginStateList.value = response.data.data || []
+      if (loginStateList.value.length > 0 && selectedLoginStateId.value == null) {
+        selectedLoginStateId.value = loginStateList.value[0].id
+      }
     }
   } catch {
     // 拦截器已弹错
@@ -174,69 +173,28 @@ async function loadLotteryAuth() {
   }
 }
 
-function openAddAuth() {
-  authEditingId.value = null
-  authForm.name = ''
-  authForm.rawHeaders = ''
-  authDialogVisible.value = true
-}
-
-async function handleSaveAuth() {
-  if (!authForm.rawHeaders.trim()) {
-    ElMessage.warning('请粘贴抓包 header（需含 X-Session-Id 与 x-Teemo 或 body.silk_id）')
+async function handleRun() {
+  if (selectedLoginStateId.value == null) {
+    ElMessage.warning('请先选择登录态')
     return
   }
-  authSaving.value = true
-  try {
-    const config = authEditingId.value != null ? { params: { id: authEditingId.value } } : undefined
-    const response = await api.post('/api/lottery/auth', { name: authForm.name, rawHeaders: authForm.rawHeaders }, config)
-    if (response.data.success) {
-      ElMessage.success('登录态已保存')
-      authDialogVisible.value = false
-      await loadLotteryAuth()
-    }
-  } catch {
-    // 拦截器已弹错
-  } finally {
-    authSaving.value = false
-  }
-}
-
-async function handleDeleteAuth(id: number) {
-  try {
-    await ElMessageBox.confirm('确认删除该登录态？', '提示', { type: 'warning' })
-  } catch {
-    return
-  }
-  try {
-    const response = await api.delete(`/api/lottery/auth/${id}`)
-    if (response.data.success) {
-      ElMessage.success('已删除')
-      await loadLotteryAuth()
-    }
-  } catch {
-    // 拦截器已弹错
-  }
-}
-
-async function handleRun(authId: number) {
-  runLoading.value = authId
+  runLoading.value = true
   runResult.value = null
   try {
-    const response = await api.post('/api/lottery/run', undefined, { params: { authId } })
+    const response = await api.post('/api/lottery/run', undefined, { params: { authId: selectedLoginStateId.value } })
     if (response.data.success) {
       runResult.value = response.data.data
     }
   } catch {
     // 拦截器已弹错
   } finally {
-    runLoading.value = null
+    runLoading.value = false
   }
 }
 
 onMounted(async () => {
   await authState?.waitForAuth()
-  await Promise.all([loadConfig(), loadBlacklist(), loadLotteryAuth()])
+  await Promise.all([loadConfig(), loadBlacklist(), loadLoginStates()])
 })
 </script>
 
@@ -318,7 +276,7 @@ onMounted(async () => {
       </el-form>
     </div>
 
-    <!-- 霸王餐刷任务（App / Android 登录态） -->
+    <!-- 霸王餐刷任务（统一登录态） -->
     <div class="settings-card lottery-card" v-loading="lotteryLoading">
       <div class="settings-sub-header">
         <h3 class="settings-title">霸王餐刷任务</h3>
@@ -326,28 +284,15 @@ onMounted(async () => {
       </div>
 
       <div class="lottery-toolbar">
-        <el-button type="primary" @click="openAddAuth">录入登录态</el-button>
-        <el-button @click="loadLotteryAuth">刷新列表</el-button>
+        <el-select v-model="selectedLoginStateId" placeholder="选择登录态" style="width: 240px">
+          <el-option v-for="s in loginStateList" :key="s.id"
+            :label="`${s.name}（用户${s.userVayne}${s.expireStatus === '已过期' ? '/已过期' : ''}）`" :value="s.id" />
+        </el-select>
+        <el-button type="primary" :loading="runLoading" @click="handleRun">刷任务</el-button>
+        <el-button @click="loadLoginStates">刷新</el-button>
+        <router-link to="/login-state" class="lottery-link">录入/管理登录态请到「登录态管理」页面</router-link>
       </div>
-
-      <el-table :data="lotteryAuthList" empty-text="暂无登录态，点上方「录入登录态」" style="width: 100%">
-        <el-table-column label="别名" prop="name" min-width="120" />
-        <el-table-column label="silk_id" prop="silkId" width="120" />
-        <el-table-column label="X-Session-Id" prop="sessionId" min-width="160" show-overflow-tooltip />
-        <el-table-column label="城市码" prop="cityCode" width="90" />
-        <el-table-column label="更新时间" prop="updateTime" width="160" />
-        <el-table-column label="操作" width="180" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              type="primary"
-              size="small"
-              :loading="runLoading === row.id"
-              @click="handleRun(row.id)"
-            >刷任务</el-button>
-            <el-button size="small" type="danger" @click="handleDeleteAuth(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="hint" v-if="loginStateList.length === 0">暂无登录态，请先到「登录态管理」页面录入。</div>
 
       <!-- 刷任务结果 -->
       <div v-if="runResult" class="lottery-result">
@@ -387,32 +332,6 @@ onMounted(async () => {
         <div v-if="runResult && runResult.error" class="lottery-result-error">{{ runResult.error }}</div>
       </div>
     </div>
-
-    <!-- 录入登录态弹窗 -->
-    <el-dialog
-      v-model="authDialogVisible"
-      :title="authEditingId != null ? '更新登录态' : '录入登录态'"
-      width="640px"
-      align-center
-    >
-      <el-form label-width="90px">
-        <el-form-item label="别名">
-          <el-input v-model="authForm.name" placeholder="如 主账号/小号" />
-        </el-form-item>
-        <el-form-item label="抓包header">
-          <el-input
-            v-model="authForm.rawHeaders"
-            type="textarea"
-            :rows="10"
-            placeholder="粘贴小蚕 App（Android）抓包 header（需含 X-Session-Id、X-Sivir、x-Teemo；可粘贴抓包工具某条 gwh.xiaocantech.com/rpc 请求的 Request Headers，或抓包 JSON）"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="authDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="authSaving" @click="handleSaveAuth">保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -478,6 +397,26 @@ $radius-lg: 16px;
 .lottery-toolbar {
   display: flex;
   gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.lottery-link {
+  color: $primary;
+  font-size: 13px;
+  text-decoration: none;
+  margin-left: auto;
+}
+
+.lottery-link:hover {
+  text-decoration: underline;
+}
+
+.hint {
+  margin-left: 0;
+  color: $text-hint;
+  font-size: 13px;
   margin-bottom: 16px;
 }
 

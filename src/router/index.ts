@@ -14,6 +14,11 @@ const router = createRouter({
       component: () => import('../views/LocationView.vue'),
     },
     {
+      path: '/login-state',
+      name: 'login-state',
+      component: () => import('../views/LoginStateView.vue'),
+    },
+    {
       path: '/monitor',
       name: 'monitor',
       component: () => import('../views/MonitorConfigView.vue'),

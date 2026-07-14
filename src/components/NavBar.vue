@@ -227,6 +227,13 @@ onMounted(() => {
       >
         地址管理
       </router-link>
+      <router-link
+        to="/login-state"
+        class="nav-link"
+        :class="{ active: currentPage === 'login-state' }"
+      >
+        登录态管理
+      </router-link>
       <router-link to="/monitor" class="nav-link" :class="{ active: currentPage === 'monitor' }">
         监控管理
       </router-link>

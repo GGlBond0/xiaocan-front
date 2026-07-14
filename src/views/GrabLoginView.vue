@@ -17,7 +17,7 @@ const loading = ref(false)
 async function loadList() {
   loading.value = true
   try {
-    const res = await api.get('/api/grab/login-state/list')
+    const res = await api.get('/api/login-state/list')
     stateList.value = res.data.data || []
   } finally {
     loading.value = false
@@ -31,7 +31,7 @@ async function handleDelete(row: any) {
   } catch {
     return
   }
-  await api.delete(`/api/grab/login-state/${row.id}`)
+  await api.delete(`/api/login-state/${row.id}`)
   ElMessage.success('已删除')
   await loadList()
 }
@@ -69,7 +69,7 @@ onMounted(async () => {
       <el-table :data="stateList" v-loading="loading" style="width: 100%" stripe>
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="别名" width="140" />
-        <el-table-column prop="xcUserId" label="小蚕用户ID" width="110" />
+        <el-table-column prop="userVayne" label="小蚕用户ID" width="110" />
         <el-table-column prop="silkId" label="silk_id" width="110" />
         <el-table-column label="所属地址" width="140">
           <template #default="{ row }">
