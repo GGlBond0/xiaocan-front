@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, inject } from 'vue'
+import { ref, computed, onMounted, inject } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
 
@@ -46,6 +46,18 @@ async function loadCardCount() {
     countLoading.value = false
   }
 }
+
+// 统计区按 name 聚合同名券，并排除饭票（饭票用顶部 ticketCount 单独显示）。
+// 饭票 cardId 随账号变（如 183=1、153=5），故按 name 判断而非写死 cardId。
+const aggregatedDetails = computed(() => {
+  if (!cardCount.value?.details) return []
+  const map = new Map<string, number>()
+  for (const d of cardCount.value.details) {
+    if (d.name === '饭票') continue
+    map.set(d.name, (map.get(d.name) || 0) + d.count)
+  }
+  return Array.from(map, ([name, count]) => ({ name, count }))
+})
 
 async function loadCards() {
   if (selectedLoginStateId.value == null) {
@@ -135,7 +147,7 @@ onMounted(async () => {
             饭票：<b>{{ cardCount.ticketCount ?? 0 }}</b> 张
             <el-tag v-if="(cardCount.ticketCount ?? 0) === 0" size="small" type="danger">不足</el-tag>
           </span>
-          <span v-for="d in cardCount.details.filter(x => x.cardId !== 1)" :key="d.cardId" class="count-item">
+          <span v-for="d in aggregatedDetails" :key="d.name" class="count-item">
             {{ d.name }}：<b>{{ d.count }}</b>
           </span>
         </template>

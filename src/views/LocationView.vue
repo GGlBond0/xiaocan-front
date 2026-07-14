@@ -52,10 +52,9 @@ async function loadAddressList() {
       addressList.value = response.data.data || []
       // 展开后加载各自登录态/spt
       await loadLoginStates()
+      // 为所有地址加载推送 spt 计数，使折叠态也能显示真实数量
       for (const addr of addressList.value) {
-        if (expandedSpt.value.has(String(addr.id))) {
-          loadPushTargets(addr.id)
-        }
+        loadPushTargets(addr.id)
       }
     } else {
       ElMessage.error(response.data.msg || '获取地址列表失败')
