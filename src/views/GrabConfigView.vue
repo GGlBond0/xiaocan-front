@@ -39,6 +39,11 @@ const form = reactive({
   enableRetry: true,
   maxRetry: 3,
   retryIntervalMs: 500,
+  // 活动快照（从活动列表选带入，提交时一并存进 grab_config，用于列表展示）
+  storeName: '' as string,
+  promoDetail: '' as string,
+  startTime: '' as string,
+  endTime: '' as string,
 })
 
 const formRules = {
@@ -86,6 +91,10 @@ function resetForm() {
     enableRetry: true,
     maxRetry: 3,
     retryIntervalMs: 500,
+    storeName: '',
+    promoDetail: '',
+    startTime: '',
+    endTime: '',
   })
 }
 
@@ -144,6 +153,10 @@ function openEdit(row: any) {
     enableRetry: row.enableRetry ?? true,
     maxRetry: row.maxRetry ?? 3,
     retryIntervalMs: row.retryIntervalMs ?? 500,
+    storeName: row.storeName || '',
+    promoDetail: row.promoDetail || '',
+    startTime: row.startTime || '',
+    endTime: row.endTime || '',
   })
   dialogVisible.value = true
 }
@@ -166,6 +179,10 @@ async function handleSubmit() {
     enableRetry: form.enableRetry,
     maxRetry: form.maxRetry,
     retryIntervalMs: form.retryIntervalMs,
+    storeName: form.storeName || null,
+    promoDetail: form.promoDetail || null,
+    startTime: form.startTime || null,
+    endTime: form.endTime || null,
   }
   if (isEdit.value) payload.id = editingId.value
   try {
@@ -272,6 +289,13 @@ async function loadStores() {
 
 function pickStore(row: any, setScheduled: boolean = false) {
   form.promotionId = row.promotionId
+  // 带入活动快照，提交时存入 grab_config 供列表展示
+  form.storeName = row.name || ''
+  form.promoDetail = (row.price != null && row.rebatePrice != null)
+    ? `满${row.price}返${row.rebatePrice}`
+    : ''
+  form.startTime = row.startTime || ''
+  form.endTime = row.endTime || ''
   // silk_id 通常与用户相关，抓包录入的登录态对应；这里不自动填，保留用户手填或 0
   let tip = `已选活动 ${row.promotionId}（${row.name}）`
   if (setScheduled && row.startTime) {
@@ -330,6 +354,15 @@ onMounted(async () => {
           </template>
         </el-table-column>
         <el-table-column prop="promotionId" label="活动ID" width="110" />
+        <el-table-column prop="storeName" label="商家名" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="promoDetail" label="优惠" width="110" show-overflow-tooltip />
+        <el-table-column label="活动时段" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="isAllDay(row)" type="info" size="small">全天</el-tag>
+            <el-tag v-else-if="row.startTime || row.endTime" type="warning" size="small">{{ timeRange(row) }}</el-tag>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="silkId" label="silk_id" width="110" />
         <el-table-column label="定时" width="180">
           <template #default="{ row }">
