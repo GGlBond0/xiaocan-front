@@ -72,7 +72,26 @@ const form = reactive({
   },
   autoGrab: false,
   grabLoginStateId: null as number | null,
+  grabPlatforms: [1] as number[], // 启用抢单的平台集合(1美团/2饿了么/3京东)，默认仅美团
 })
+
+// 平台选项：1美团/2饿了么/3京东
+const platformOptions = [
+  { label: '美团', value: 1 },
+  { label: '饿了么', value: 2 },
+  { label: '京东', value: 3 },
+]
+function platformLabel(code: number): string {
+  return platformOptions.find((p) => p.value === code)?.label ?? '未知'
+}
+function platformLabels(codes: number[] | string | undefined): string {
+  if (!codes) return '仅美团'
+  const arr: number[] = typeof codes === 'string'
+    ? codes.split(',').map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n))
+    : codes
+  if (arr.length === 0) return '仅美团'
+  return arr.map(platformLabel).join('、')
+}
 
 const cronCollapseActive = ref<string[]>([])
 
@@ -297,6 +316,7 @@ function resetForm() {
   form.storeKeywordExtNotifyConfig = { keyword: '', limitDistance: true, within3km: false }
   form.autoGrab = false
   form.grabLoginStateId = null
+  form.grabPlatforms = [1]
   cronCollapseActive.value = []
   configType.value = 'MINIMUM_PAY'
   isEdit.value = false
@@ -332,6 +352,12 @@ function showEditDialog(config: any) {
   }
   form.autoGrab = config.autoGrab === true
   form.grabLoginStateId = config.grabLoginStateId ?? null
+  // grabPlatforms 字符串 "1,2" → number[]，空/缺省 → [1]（仅美团）
+  const gpRaw = (config as any).grabPlatforms
+  const gpArr = typeof gpRaw === 'string' && gpRaw.trim()
+    ? gpRaw.split(',').map((s: string) => Number(s.trim())).filter((n: number) => !Number.isNaN(n))
+    : []
+  form.grabPlatforms = gpArr.length > 0 ? gpArr : [1]
   dialogVisible.value = true
 }
 
@@ -349,6 +375,7 @@ function submitForm() {
           weeks: trimmedCron ? (form.weeks.length > 0 ? form.weeks.join(',') : null) : form.weeks.join(','),
           autoGrab: form.autoGrab === true,
           grabLoginStateId: form.autoGrab ? form.grabLoginStateId : null,
+          grabPlatforms: form.autoGrab ? (form.grabPlatforms.length > 0 ? form.grabPlatforms.join(',') : '1') : null,
         }
 
         if (isEdit.value) {
@@ -586,7 +613,7 @@ onUnmounted(() => {
                 <span>cron：{{ config.cron }}</span>
               </p>
               <p v-if="config.autoGrab" class="info-item">
-                <span>自动抢单：开启（{{ getLoginStateName(config.grabLoginStateId) }}）</span>
+                <span>自动抢单：开启（{{ getLoginStateName(config.grabLoginStateId) }}）·平台：{{ platformLabels(config.grabPlatforms) }}</span>
               </p>
               <p
                 v-if="config.type === 'MINIMUM_PAY' && config.minimumPayExtNotifyConfig"
@@ -726,7 +753,7 @@ onUnmounted(() => {
             </div>
             <div class="detail-item">
               <label>自动抢单：</label>
-              <span>{{ currentDetail.autoGrab ? `开启（${getLoginStateName(currentDetail.grabLoginStateId)}）` : '关闭' }}</span>
+              <span>{{ currentDetail.autoGrab ? `开启（${getLoginStateName(currentDetail.grabLoginStateId)}）·平台：${platformLabels(currentDetail.grabPlatforms)}` : '关闭' }}</span>
             </div>
           </div>
         </div>
@@ -953,10 +980,10 @@ onUnmounted(() => {
           </el-form-item>
         </template>
 
-        <!-- 自动抢单：命中美团活动后自动建立抢单任务 -->
+        <!-- 自动抢单：命中活动后自动建立抢单任务 -->
         <el-form-item label="自动抢单">
           <el-switch v-model="form.autoGrab" />
-          <span class="cron-tip" style="margin-left: 10px">开启后，监控命中美团活动会自动用所选账号建抢单任务</span>
+          <span class="cron-tip" style="margin-left: 10px">开启后，监控命中所选平台活动会自动用所选账号建抢单任务</span>
         </el-form-item>
         <el-form-item v-if="form.autoGrab" label="抢单账号" prop="grabLoginStateId">
           <el-select v-model="form.grabLoginStateId" placeholder="请选择抢单账号" style="width: 100%">
@@ -967,6 +994,12 @@ onUnmounted(() => {
               :value="s.id"
             />
           </el-select>
+        </el-form-item>
+        <el-form-item v-if="form.autoGrab" label="抢单平台">
+          <el-checkbox-group v-model="form.grabPlatforms">
+            <el-checkbox v-for="p in platformOptions" :key="p.value" :label="p.label" :value="p.value" />
+          </el-checkbox-group>
+          <span class="cron-tip" style="display:block">勾选对哪些平台命中时自动抢单；不勾选平台命中只通知不抢。默认仅美团。</span>
         </el-form-item>
       </el-form>
 
