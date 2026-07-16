@@ -71,8 +71,9 @@ const form = reactive({
     within3km: false,
   },
   autoGrab: false,
-  grabLoginStateId: null as number | null,
-  grabPlatforms: [1] as number[], // 启用抢单的平台集合(1美团/2饿了么/3京东)，默认仅美团
+  grabLoginStateIds: [] as number[], // 有序抢单账号，顺序=账号优先级
+  grabPlatforms: [1] as number[], // 有序抢单平台(1美团/2饿了么/3京东)，顺序=平台优先级，默认仅美团
+  grabMode: 'SINGLE' as 'SINGLE' | 'ALL', // 抢单模式 SINGLE 抢一个名额(换号降级)/ALL 每账号各抢一个(不换号)
 })
 
 // 平台选项：1美团/2饿了么/3京东
@@ -173,10 +174,10 @@ const formRules = {
       trigger: 'blur',
     },
   ],
-  grabLoginStateId: [
+  grabLoginStateIds: [
     {
-      validator: (_rule: any, value: number | null, callback: any) => {
-        if (form.autoGrab && (value === null || value === undefined)) {
+      validator: (_rule: any, value: number[] | null, callback: any) => {
+        if (form.autoGrab && (!value || value.length === 0)) {
           callback(new Error('开启自动抢单时必须选择抢单账号'))
         } else {
           callback()
@@ -305,6 +306,48 @@ function getLoginStateName(id: number | null) {
   return s ? s.name : '未知账号'
 }
 
+// 多账号名展示：grabLoginStateIds 串 → 按优先级顺序的账号名（回退 grabLoginStateId 单值）
+function getLoginStateNames(ids: any, singleId: number | null): string {
+  let arr: number[] = []
+  if (typeof ids === 'string' && ids.trim()) {
+    arr = ids.split(',').map((s: string) => Number(s.trim())).filter((n: number) => !Number.isNaN(n))
+  }
+  if (arr.length === 0 && singleId != null) arr = [singleId]
+  if (arr.length === 0) return ''
+  return arr.map((id) => getLoginStateName(id)).join(' > ')
+}
+
+// 平台优先级展示：grabPlatforms 串 → "美团 > 饿了么"
+function platformPriorityLabels(ids: any): string {
+  let arr: number[] = []
+  if (typeof ids === 'string' && ids.trim()) {
+    arr = ids.split(',').map((s: string) => Number(s.trim())).filter((n: number) => !Number.isNaN(n))
+  }
+  if (arr.length === 0) arr = [1]
+  return arr.map((p) => platformLabel(p)).join(' > ')
+}
+
+// 账号多选排序：上移/下移
+function moveAccount(idx: number, delta: number) {
+  const arr = form.grabLoginStateIds
+  const j = idx + delta
+  if (j < 0 || j >= arr.length) return
+  const a = arr[idx] as number
+  const b = arr[j] as number
+  arr.splice(idx, 1, b)
+  arr.splice(j, 1, a)
+}
+// 平台多选排序：上移/下移
+function movePlatform(idx: number, delta: number) {
+  const arr = form.grabPlatforms
+  const j = idx + delta
+  if (j < 0 || j >= arr.length) return
+  const a = arr[idx] as number
+  const b = arr[j] as number
+  arr.splice(idx, 1, b)
+  arr.splice(j, 1, a)
+}
+
 function resetForm() {
   formRef.value?.resetFields()
   form.locationId = null
@@ -315,8 +358,9 @@ function resetForm() {
   form.minimumPayExtNotifyConfig = { minimumPay: 1, within3km: false }
   form.storeKeywordExtNotifyConfig = { keyword: '', limitDistance: true, within3km: false }
   form.autoGrab = false
-  form.grabLoginStateId = null
+  form.grabLoginStateIds = []
   form.grabPlatforms = [1]
+  form.grabMode = 'SINGLE'
   cronCollapseActive.value = []
   configType.value = 'MINIMUM_PAY'
   isEdit.value = false
@@ -351,13 +395,21 @@ function showEditDialog(config: any) {
     form.storeKeywordExtNotifyConfig.within3km = config.storeKeywordExtNotifyConfig.within3km === true
   }
   form.autoGrab = config.autoGrab === true
-  form.grabLoginStateId = config.grabLoginStateId ?? null
+  // grabLoginStateIds 字符串 "12,5" → number[]，空回退 grabLoginStateId 单值
+  const glsRaw = (config as any).grabLoginStateIds
+  const glsArr = typeof glsRaw === 'string' && glsRaw.trim()
+    ? glsRaw.split(',').map((s: string) => Number(s.trim())).filter((n: number) => !Number.isNaN(n))
+    : []
+  form.grabLoginStateIds = glsArr.length > 0
+    ? glsArr
+    : (config.grabLoginStateId != null ? [config.grabLoginStateId] : [])
   // grabPlatforms 字符串 "1,2" → number[]，空/缺省 → [1]（仅美团）
   const gpRaw = (config as any).grabPlatforms
   const gpArr = typeof gpRaw === 'string' && gpRaw.trim()
     ? gpRaw.split(',').map((s: string) => Number(s.trim())).filter((n: number) => !Number.isNaN(n))
     : []
   form.grabPlatforms = gpArr.length > 0 ? gpArr : [1]
+  form.grabMode = (config as any).grabMode === 'ALL' ? 'ALL' : 'SINGLE'
   dialogVisible.value = true
 }
 
@@ -374,8 +426,9 @@ function submitForm() {
           endHour: trimmedCron ? (form.endHour ?? null) : form.endHour,
           weeks: trimmedCron ? (form.weeks.length > 0 ? form.weeks.join(',') : null) : form.weeks.join(','),
           autoGrab: form.autoGrab === true,
-          grabLoginStateId: form.autoGrab ? form.grabLoginStateId : null,
+          grabLoginStateIds: form.autoGrab ? (form.grabLoginStateIds.length > 0 ? form.grabLoginStateIds.join(',') : null) : null,
           grabPlatforms: form.autoGrab ? (form.grabPlatforms.length > 0 ? form.grabPlatforms.join(',') : '1') : null,
+          grabMode: form.autoGrab ? form.grabMode : null,
         }
 
         if (isEdit.value) {
@@ -613,7 +666,7 @@ onUnmounted(() => {
                 <span>cron：{{ config.cron }}</span>
               </p>
               <p v-if="config.autoGrab" class="info-item">
-                <span>自动抢单：开启（{{ getLoginStateName(config.grabLoginStateId) }}）·平台：{{ platformLabels(config.grabPlatforms) }}</span>
+                <span>自动抢单：开启（{{ getLoginStateNames(config.grabLoginStateIds, config.grabLoginStateId) }}）·平台：{{ platformPriorityLabels(config.grabPlatforms) }}·模式：{{ config.grabMode === 'ALL' ? '每账号各抢' : '抢一个' }}</span>
               </p>
               <p
                 v-if="config.type === 'MINIMUM_PAY' && config.minimumPayExtNotifyConfig"
@@ -753,7 +806,7 @@ onUnmounted(() => {
             </div>
             <div class="detail-item">
               <label>自动抢单：</label>
-              <span>{{ currentDetail.autoGrab ? `开启（${getLoginStateName(currentDetail.grabLoginStateId)}）·平台：${platformLabels(currentDetail.grabPlatforms)}` : '关闭' }}</span>
+              <span>{{ currentDetail.autoGrab ? `开启（${getLoginStateNames(currentDetail.grabLoginStateIds, currentDetail.grabLoginStateId)}）·平台：${platformPriorityLabels(currentDetail.grabPlatforms)}·模式：${currentDetail.grabMode === 'ALL' ? '每账号各抢' : '抢一个'}` : '关闭' }}</span>
             </div>
           </div>
         </div>
@@ -985,8 +1038,8 @@ onUnmounted(() => {
           <el-switch v-model="form.autoGrab" />
           <span class="cron-tip" style="margin-left: 10px">开启后，监控命中所选平台活动会自动用所选账号建抢单任务</span>
         </el-form-item>
-        <el-form-item v-if="form.autoGrab" label="抢单账号" prop="grabLoginStateId">
-          <el-select v-model="form.grabLoginStateId" placeholder="请选择抢单账号" style="width: 100%">
+        <el-form-item v-if="form.autoGrab" label="抢单账号" prop="grabLoginStateIds">
+          <el-select v-model="form.grabLoginStateIds" multiple placeholder="请选择抢单账号(可多选)" style="width: 100%">
             <el-option
               v-for="s in loginStateList"
               :key="s.id"
@@ -994,12 +1047,41 @@ onUnmounted(() => {
               :value="s.id"
             />
           </el-select>
+          <div v-if="form.grabLoginStateIds.length > 0" style="margin-top: 6px">
+            <span class="cron-tip">账号优先级(从高到低)，可用上下移调整：</span>
+            <div v-for="(aid, idx) in form.grabLoginStateIds" :key="aid" style="margin: 4px 0">
+              <el-button size="small" :icon="'ArrowUp'" :disabled="idx === 0" @click="moveAccount(idx, -1)" />
+              <el-button size="small" :icon="'ArrowDown'" :disabled="idx === form.grabLoginStateIds.length - 1" @click="moveAccount(idx, 1)" />
+              <span style="margin-left: 8px">{{ getLoginStateName(aid) }}</span>
+            </div>
+          </div>
+          <span class="cron-tip" style="display:block">SINGLE 模式按此优先级换号；ALL 模式每个账号各抢一个名额。</span>
         </el-form-item>
         <el-form-item v-if="form.autoGrab" label="抢单平台">
-          <el-checkbox-group v-model="form.grabPlatforms">
-            <el-checkbox v-for="p in platformOptions" :key="p.value" :label="p.label" :value="p.value" />
-          </el-checkbox-group>
-          <span class="cron-tip" style="display:block">勾选对哪些平台命中时自动抢单；不勾选平台命中只通知不抢。默认仅美团。</span>
+          <el-select v-model="form.grabPlatforms" multiple placeholder="请选择抢单平台" style="width: 100%">
+            <el-option
+              v-for="p in platformOptions"
+              :key="p.value"
+              :label="p.label"
+              :value="p.value"
+            />
+          </el-select>
+          <div v-if="form.grabPlatforms.length > 0" style="margin-top: 6px">
+            <span class="cron-tip">平台优先级(从高到低)，可用上下移调整：</span>
+            <div v-for="(pid, idx) in form.grabPlatforms" :key="pid" style="margin: 4px 0">
+              <el-button size="small" :icon="'ArrowUp'" :disabled="idx === 0" @click="movePlatform(idx, -1)" />
+              <el-button size="small" :icon="'ArrowDown'" :disabled="idx === form.grabPlatforms.length - 1" @click="movePlatform(idx, 1)" />
+              <span style="margin-left: 8px">{{ platformLabel(pid) }}</span>
+            </div>
+          </div>
+          <span class="cron-tip" style="display:block">按优先级降级抢；不勾选平台命中只通知不抢。默认仅美团。</span>
+        </el-form-item>
+        <el-form-item v-if="form.autoGrab" label="抢单模式">
+          <el-radio-group v-model="form.grabMode">
+            <el-radio value="SINGLE">抢一个名额(失败换号降级)</el-radio>
+            <el-radio value="ALL">每账号各抢一个(不换号)</el-radio>
+          </el-radio-group>
+          <span class="cron-tip" style="display:block">SINGLE：抢到一个名额即停，账号失败换下一账号、组合失败降级下一平台。ALL：每个账号各自独立抢一个名额。</span>
         </el-form-item>
       </el-form>
 
