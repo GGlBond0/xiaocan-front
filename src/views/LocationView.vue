@@ -242,43 +242,32 @@ async function toggleLogin(locationId: string) {
   }
 }
 
-// 新增登录态对话框
+// 绑定登录态对话框（选择已有登录态，录入在「登录态管理」页进行）
 const loginDialogVisible = ref(false)
 const loginDialogLocationId = ref<string | null>(null)
-const loginForm = reactive({ name: '', rawHeaders: '' })
-const loginEditingId = ref<number | null>(null)
+const loginForm = reactive({ selectedId: null as number | null })
 const loginSaving = ref(false)
+
+// 可绑定到当前地址的登录态：未绑定（locationId 为空）或已绑当前地址
+function availableLoginStates(locationId: string | null) {
+  return allLoginStates.value.filter((s: any) =>
+    s.locationId == null || String(s.locationId) === String(locationId))
+}
 
 function openAddLogin(locationId: string) {
   loginDialogLocationId.value = locationId
-  loginEditingId.value = null
-  loginForm.name = ''
-  loginForm.rawHeaders = ''
+  loginForm.selectedId = null
   loginDialogVisible.value = true
+  if (allLoginStates.value.length === 0) loadLoginStates()
 }
 
-function openEditLogin(row: any) {
-  loginEditingId.value = row.id
-  loginDialogLocationId.value = row.locationId
-  loginForm.name = row.name
-  loginForm.rawHeaders = ''
-  loginDialogVisible.value = true
-}
-
-async function saveLoginState() {
-  if (!loginForm.rawHeaders.trim()) {
-    ElMessage.warning('请粘贴抓包 header')
-    return
-  }
+async function bindLogin() {
+  if (!loginForm.selectedId) return
   loginSaving.value = true
   try {
-    const config = loginEditingId.value != null ? { params: { id: loginEditingId.value } } : undefined
-    const payload: any = { name: loginForm.name, rawHeaders: loginForm.rawHeaders }
-    if (loginEditingId.value == null && loginDialogLocationId.value) {
-      payload.locationId = Number(loginDialogLocationId.value)
-    }
-    const res = await api.post('/api/login-state', payload, config)
-    ElMessage.success(res.data.data?.msg || '已保存')
+    await api.put(`/api/login-state/${loginForm.selectedId}/location`, null,
+      { params: { locationId: Number(loginDialogLocationId.value) } })
+    ElMessage.success('已绑定')
     loginDialogVisible.value = false
     await loadLoginStates()
   } catch {
@@ -286,6 +275,17 @@ async function saveLoginState() {
   } finally {
     loginSaving.value = false
   }
+}
+
+async function unbindLogin(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定把登录态「${row.name}」从该地址解绑？解绑后可被其它地址选择。`, '提示', { type: 'warning' })
+  } catch {
+    return
+  }
+  await api.put(`/api/login-state/${row.id}/location`)
+  ElMessage.success('已解绑')
+  await loadLoginStates()
 }
 
 async function deleteLogin(row: any) {
@@ -484,7 +484,7 @@ onMounted(async () => {
                     <el-tag size="small" :type="loginStatusType(s.expireStatus)">{{ s.expireStatus }}</el-tag>
                     <span class="login-expire">{{ s.expireAt }}</span>
                     <div class="login-ops">
-                      <el-button size="small" link @click="openEditLogin(s)">更新</el-button>
+                      <el-button size="small" link type="warning" @click="unbindLogin(s)">解绑</el-button>
                       <el-button size="small" link type="danger" @click="deleteLogin(s)">删除</el-button>
                     </div>
                   </div>
@@ -595,21 +595,22 @@ onMounted(async () => {
       </el-form>
     </el-card>
 
-    <!-- 新增/编辑登录态对话框 -->
-    <el-dialog v-model="loginDialogVisible" :title="loginEditingId != null ? '更新登录态' : '新增登录态'" width="560px" align-center>
+    <!-- 绑定登录态对话框（选择已有登录态） -->
+    <el-dialog v-model="loginDialogVisible" title="绑定登录态" width="480px" align-center>
       <el-form label-width="90px">
-        <el-form-item label="别名">
-          <el-input v-model="loginForm.name" placeholder="如 主账号/小号" />
+        <el-form-item label="登录态">
+          <el-select v-model="loginForm.selectedId" placeholder="选择未绑定的登录态" style="width: 100%" filterable>
+            <el-option v-for="s in availableLoginStates(loginDialogLocationId)" :key="s.id"
+              :label="`${s.name}（用户${s.userVayne}${s.expireStatus === '已过期' ? '/已过期' : ''}）`" :value="s.id" />
+          </el-select>
+          <div class="hint" v-if="availableLoginStates(loginDialogLocationId).length === 0">
+            没有可绑定的登录态，请先到「登录态管理」页面录入
+          </div>
         </el-form-item>
-        <el-form-item label="抓包header">
-          <el-input v-model="loginForm.rawHeaders" type="textarea" :rows="10"
-            placeholder="粘贴抓包 header（含 X-Sivir/X-Session-Id/X-Vayne/X-Teemo/X-Nami）或抓包 JSON" />
-        </el-form-item>
-        <div v-if="loginEditingId != null" class="hint">更新登录态需重新粘贴抓包 header，同一小蚕账号会自动覆盖原记录。</div>
       </el-form>
       <template #footer>
         <el-button @click="loginDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="loginSaving" @click="saveLoginState">保存</el-button>
+        <el-button type="primary" :loading="loginSaving" :disabled="!loginForm.selectedId" @click="bindLogin">绑定</el-button>
       </template>
     </el-dialog>
 
