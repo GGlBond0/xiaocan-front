@@ -282,6 +282,89 @@ async function handleRun() {
   runLoading.value = false
 }
 
+// ===== 开红包 / 领累计奖励（独立按钮，复用登录态多选，串行，长超时） =====
+const drawLoading = ref(false)
+const claimLoading = ref(false)
+// draw/claim-step 单账号可能耗时数分钟（账号内 10s 间隔 × 次数），axios 单请求超时设 10 分钟
+const LONG_TIMEOUT = 600000
+interface DrawBatchResult {
+  authId: number
+  authName: string
+  result: any
+}
+const drawResults = ref<DrawBatchResult[]>([])
+const drawProgress = ref<{ idx: number; total: number; currentName: string } | null>(null)
+
+interface ClaimBatchResult {
+  authId: number
+  authName: string
+  result: any
+}
+const claimResults = ref<ClaimBatchResult[]>([])
+const claimProgress = ref<{ idx: number; total: number; currentName: string } | null>(null)
+
+// 开红包：对选中账号串行调 /api/lottery/draw（抽完该账号所有次数）
+async function handleDraw() {
+  if (selectedAuthIds.value.length === 0) {
+    ElMessage.warning('请先选择账号')
+    return
+  }
+  drawLoading.value = true
+  drawResults.value = []
+  const ids = [...selectedAuthIds.value]
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i]!
+    const st = loginStateList.value.find((s) => s.id === id)
+    const name = st?.name ?? `#${id}`
+    drawProgress.value = { idx: i + 1, total: ids.length, currentName: name }
+    let result: any = null
+    try {
+      const response = await api.post('/api/lottery/draw', undefined, { params: { authId: id }, timeout: LONG_TIMEOUT })
+      if (response.data.success) {
+        result = response.data.data
+      } else {
+        result = { authName: name, error: response.data?.msg || '开红包失败' }
+      }
+    } catch (e: any) {
+      result = { authName: name, error: e?.message || '请求异常' }
+    }
+    drawResults.value.push({ authId: id, authName: name, result })
+  }
+  drawProgress.value = null
+  drawLoading.value = false
+}
+
+// 领累计奖励：对选中账号串行调 /api/lottery/claim-step
+async function handleClaimStep() {
+  if (selectedAuthIds.value.length === 0) {
+    ElMessage.warning('请先选择账号')
+    return
+  }
+  claimLoading.value = true
+  claimResults.value = []
+  const ids = [...selectedAuthIds.value]
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i]!
+    const st = loginStateList.value.find((s) => s.id === id)
+    const name = st?.name ?? `#${id}`
+    claimProgress.value = { idx: i + 1, total: ids.length, currentName: name }
+    let result: any = null
+    try {
+      const response = await api.post('/api/lottery/claim-step', undefined, { params: { authId: id }, timeout: LONG_TIMEOUT })
+      if (response.data.success) {
+        result = response.data.data
+      } else {
+        result = { authName: name, error: response.data?.msg || '领累计奖励失败' }
+      }
+    } catch (e: any) {
+      result = { authName: name, error: e?.message || '请求异常' }
+    }
+    claimResults.value.push({ authId: id, authName: name, result })
+  }
+  claimProgress.value = null
+  claimLoading.value = false
+}
+
 onMounted(async () => {
   await authState?.waitForAuth()
   await Promise.all([loadConfig(), loadBlacklist(), loadLoginStates()])
@@ -370,7 +453,7 @@ onMounted(async () => {
     <div class="settings-card lottery-card" v-loading="lotteryLoading">
       <div class="settings-sub-header">
         <h3 class="settings-title">霸王餐刷任务</h3>
-        <p class="settings-desc">自动完成霸王餐抽奖页的"浏览/领取类"任务攒抽奖机会；登录态用小蚕 App（Android）抓包，比小程序登录态更长效；执行抽奖仍被风控验证拦，需手动完成</p>
+        <p class="settings-desc">选择登录态后独立操作：刷任务（攒抽奖机会）、开红包（用次数抽奖）、领累计奖励（阶梯奖）。三个按钮互不影响，可分别多次测试。执行抽奖/领奖可能触发上游风控，账号被封需等待自动解封。</p>
       </div>
 
       <div class="lottery-toolbar">
@@ -390,6 +473,8 @@ onMounted(async () => {
         <el-button size="small" :disabled="runLoading || selectedAuthIds.length === 0" @click="handleClearAll">清空</el-button>
         <span class="lottery-count" v-if="totalCount > 0">已选 {{ selectedCount }}/{{ totalCount }} 个</span>
         <el-button type="primary" :loading="runLoading" :disabled="selectedAuthIds.length === 0" @click="handleRun">刷任务</el-button>
+        <el-button type="warning" :loading="drawLoading" :disabled="selectedAuthIds.length === 0 || runLoading" @click="handleDraw">开红包</el-button>
+        <el-button type="success" :loading="claimLoading" :disabled="selectedAuthIds.length === 0 || runLoading" @click="handleClaimStep">领累计奖励</el-button>
         <el-button @click="loadLoginStates">刷新</el-button>
         <router-link to="/login-state" class="lottery-link">录入/管理登录态请到「登录态管理」页面</router-link>
       </div>
@@ -450,6 +535,70 @@ onMounted(async () => {
         <div v-if="br.result && br.result.error" class="lottery-result-error">
           <span class="lottery-error-tip">失败：{{ friendlyErrorOf(br.result) }}</span>
           <span class="lottery-error-raw" v-if="friendlyErrorOf(br.result) !== br.result.error">（原始：{{ br.result.error }}）</span>
+        </div>
+      </div>
+
+      <!-- 开红包进度 -->
+      <div v-if="drawProgress" class="lottery-progress">
+        正在开红包 第 {{ drawProgress.idx }}/{{ drawProgress.total }} 个 · {{ drawProgress.currentName }}…
+      </div>
+
+      <!-- 开红包结果 -->
+      <div
+        v-for="dr in drawResults"
+        :key="'draw-' + dr.authId"
+        class="lottery-result"
+        :class="{ 'lottery-result-fail': !!dr.result?.error }"
+      >
+        <div class="lottery-result-title">开红包结果（{{ dr.authName }}）</div>
+        <div class="lottery-result-grid">
+          <div class="lottery-result-cell">
+            <span class="lottery-result-label">开前机会数</span>
+            <span class="lottery-result-value">{{ dr.result?.beforeCount ?? '—' }}</span>
+          </div>
+          <div class="lottery-result-cell">
+            <span class="lottery-result-label">开后机会数</span>
+            <span class="lottery-result-value">{{ dr.result?.afterCount ?? '—' }}</span>
+          </div>
+          <div class="lottery-result-cell">
+            <span class="lottery-result-label">抽中次数</span>
+            <span class="lottery-result-value ok">{{ (dr.result?.prizes || []).filter((p: any) => p?.ok).length }}</span>
+          </div>
+        </div>
+        <div v-if="dr.result && dr.result.prizes && dr.result.prizes.length" class="lottery-tasks">
+          <div class="lottery-tasks-title">奖品明细</div>
+          <div v-for="(p, idx) in dr.result.prizes" :key="idx" class="lottery-task-item">
+            <span class="lottery-task-type">{{ p?.name || '—' }}</span>
+            <span class="lottery-task-state" :class="p?.ok ? 'ok' : 'fail'">{{ p?.ok ? '成功' : '失败' }}</span>
+            <span class="lottery-task-msg" v-if="p?.msg">{{ p.msg }}</span>
+          </div>
+        </div>
+        <div v-if="dr.result && dr.result.error" class="lottery-result-error">
+          <span class="lottery-error-tip">失败：{{ friendlyErrorOf(dr.result) }}</span>
+        </div>
+      </div>
+
+      <!-- 领累计奖励进度 -->
+      <div v-if="claimProgress" class="lottery-progress">
+        正在领累计奖励 第 {{ claimProgress.idx }}/{{ claimProgress.total }} 个 · {{ claimProgress.currentName }}…
+      </div>
+
+      <!-- 领累计奖励结果 -->
+      <div
+        v-for="cr in claimResults"
+        :key="'claim-' + cr.authId"
+        class="lottery-result"
+        :class="{ 'lottery-result-fail': !!cr.result?.error }"
+      >
+        <div class="lottery-result-title">领累计奖励结果（{{ cr.authName }}）</div>
+        <div v-if="cr.result && cr.result.items && cr.result.items.length" class="lottery-tasks">
+          <div v-for="it in cr.result.items" :key="it.step" class="lottery-task-item">
+            <span class="lottery-task-type">阶梯{{ it.step }}</span>
+            <span class="lottery-task-state" :class="it.ok ? 'ok' : (it.msg === '已领取' || it.msg === '未达阶梯阈值' ? 'skip' : 'fail')">{{ it.ok ? '成功' : it.msg }}</span>
+          </div>
+        </div>
+        <div v-if="cr.result && cr.result.error" class="lottery-result-error">
+          <span class="lottery-error-tip">失败：{{ friendlyErrorOf(cr.result) }}</span>
         </div>
       </div>
     </div>
