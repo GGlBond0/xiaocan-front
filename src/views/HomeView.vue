@@ -254,24 +254,6 @@ async function refreshCurrentPageData() {
   }
 }
 
-async function handleApply(store: any) {
-  const loadingKey = store.promotionId + '_apply'
-  actionLoading[loadingKey] = true
-  try {
-    const response = await api.post(`/api/xiaochan/apply/${store.promotionId}`)
-    if (response.data.success) {
-      ElMessage.success('报名成功!')
-      refreshCurrentPageData()
-    } else {
-      ElMessage.error(response.data.msg || '报名失败')
-    }
-  } catch {
-    ElMessage.error('网络错误，请稍后重试')
-  } finally {
-    actionLoading[loadingKey] = false
-  }
-}
-
 function handleBook(store: any) {
   currentNotifyStore.value = store
   notifyConfigForm.startHour = 8
@@ -280,33 +262,6 @@ function handleBook(store: any) {
   notifyConfigForm.cron = ''
   notifyConfigCronCollapseActive.value = []
   notifyConfigVisible.value = true
-}
-
-async function handleIgnore(store: any) {
-  const loadingKey = store.storeId + '_ignore'
-  actionLoading[loadingKey] = true
-  try {
-    const ignoreData = {
-      storeId: store.storeId.toString(),
-      storeName: store.name,
-      type: store.type,
-      price: store.price,
-      rebatePrice: store.rebatePrice,
-      rebateCondition: store.rebateCondition,
-      icon: store.icon,
-    }
-    const response = await api.post('/api/xiaochan/ignore', ignoreData)
-    if (response.data.success) {
-      ElMessage.success('已忽略该门店')
-      refreshCurrentPageData()
-    } else {
-      ElMessage.error(response.data.msg || '操作失败')
-    }
-  } catch {
-    ElMessage.error('网络错误，请稍后重试')
-  } finally {
-    actionLoading[loadingKey] = false
-  }
 }
 
 function getPlatformName(type: number) {
